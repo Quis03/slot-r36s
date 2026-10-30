@@ -37,6 +37,9 @@ export SLOT_ROOT="$SD"
 export SLOT_RUN=/run
 export BASEOS_TARGET=r36s
 export BASEOS_MODEL="R36S"
+# mGBA cannot hold full speed on the RK3326; gpSP's dynarec can. A game set
+# to mGBA in slot's core picker keeps it.
+export SLOT_GBA_CORE=gpsp
 
 if [ "$MODE" = test ]; then
 	# slot powers off with poweroff(8) and restarts with reboot(8); in a test

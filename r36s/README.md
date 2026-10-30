@@ -11,6 +11,11 @@ prende solo il posto di EmulationStation.
 - **Tasti**: mappa per il joypad "GO-Super Gamepad" (`crates/slot/src/input/evdev.rs`).
   FN = Menu, SELECT/START come scritti, croce e levetta sinistra muovono.
 - **Avvio**: `card/System/r36s-launch.sh` e gli script in `card/tools/`.
+- **Core GBA**: gpSP di default (`SLOT_GBA_CORE=gpsp` nel launcher), perché
+  mGBA non tiene i 60 fps sull'RK3326. Il selettore del core di slot vale
+  ancora per il singolo gioco.
+- **Schermo 640×480**: il 3× del GBA non ci sta. Menu → Screen → GBA → Scale:
+  *Integer* è il 2× nitido (480×320), *Fit* riempie la larghezza a 2,67×.
 
 ## Build
 

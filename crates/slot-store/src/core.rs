@@ -5,6 +5,8 @@ use crate::Platform;
 
 pub const SELECTED_CORE_FILE: &str = "Config/selected_core.txt";
 
+pub const GBA_CORE_ENV: &str = "SLOT_GBA_CORE";
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Core {
     #[default]
@@ -48,9 +50,13 @@ impl Core {
         }
     }
 
+    /// A base OS on a slower chip can name gpSP, or mGBA, as the default for GBA
+    /// games in SLOT_GBA_CORE; a game's own choice still wins.
     pub fn default_for(platform: Platform) -> Core {
-        match platform {
-            Platform::Gba | Platform::Gb | Platform::Gbc | Platform::Gbav => Core::Mgba,
+        let named = std::env::var(GBA_CORE_ENV).ok().as_deref().and_then(Core::parse);
+        match (platform, named) {
+            (Platform::Gba | Platform::Gbav, Some(core)) => core,
+            (Platform::Gba | Platform::Gb | Platform::Gbc | Platform::Gbav, _) => Core::Mgba,
         }
     }
 }
@@ -66,7 +72,7 @@ pub fn core_for(root: &Path, stem: &str) -> Core {
     crate::ini::value(root, SELECTED_CORE_FILE, stem)
         .as_deref()
         .and_then(Core::parse)
-        .unwrap_or_default()
+        .unwrap_or_else(|| Core::default_for(Platform::Gba))
 }
 
 pub fn core_for_platform(root: &Path, stem: &str, platform: Platform) -> Core {
