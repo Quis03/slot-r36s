@@ -104,7 +104,16 @@ heat() {
 	f=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq 2>/dev/null)
 	echo "cpu ${t%???}°C at ${f%???} MHz"
 }
-log "start $MODE, $(heat)"
+jack() {
+	for e in /dev/input/event*; do
+		grep -q Headphones "/sys/class/input/$(basename "$e")/device/name" 2>/dev/null || continue
+		evtest --query "$e" EV_SW SW_HEADPHONE_INSERT >/dev/null 2>&1
+		[ $? -eq 10 ] && echo "headphones in" || echo "headphones out"
+		return
+	done
+	echo "no headphone switch"
+}
+log "start $MODE, $(heat), $(jack)"
 # exFAT keeps no exec bit of its own; if the mount gives none, load slot
 # through the dynamic linker instead.
 if [ -x "$SYS/slot" ]; then
@@ -114,7 +123,7 @@ else
 	/lib/ld-linux-aarch64.so.1 "$SYS/slot" > "$LOGS/slot.log" 2>&1
 fi
 status=$?
-log "slot exited $status, $(heat)"
+log "slot exited $status, $(heat), $(jack), path $(amixer sget 'Playback Path' 2>&1 | grep -o "Item0: '[^']*'")"
 
 for d in ogage oga_events; do
 	pkill -CONT -x "$d" 2>/dev/null
