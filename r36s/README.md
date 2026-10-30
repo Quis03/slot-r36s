@@ -67,7 +67,7 @@ ArkOS → Options → **Tools**:
 | Voce | Cosa fa |
 |---|---|
 | **Slot** | Prova slot. Spegni/Riavvia dentro slot ti riportano ad ArkOS |
-| **Slot - Installa** | La console si avvia direttamente in slot. Spegne anche Samba, SSH, Bluetooth e gli altri servizi di condivisione |
+| **Slot - Installa** | La console si avvia direttamente in slot. Spegne anche Samba, SSH, Bluetooth, gli altri servizi di condivisione e gli aiutanti di ArkOS per EmulationStation (icona Wi-Fi, lettore video, sospensione automatica) |
 | **Slot - Disinstalla** | Torna EmulationStation all'avvio e riaccende i servizi spenti |
 
 Se slot si blocca o non parte, al riavvio torna da sola EmulationStation. Per
@@ -76,7 +76,8 @@ avviare ArkOS una volta senza disinstallare, crea dal PC un file vuoto
 
 Mentre slot gira, il mixer del chip audio (RK817) è portato sull'altoparlante
 e al massimo, perché il volume lo regola slot; all'uscita tornano i livelli di
-ArkOS. Valori prima e dopo sono in `slot-session.log`.
+ArkOS. Valori prima e dopo sono in `slot-session.log`. Con una scheda audio USB-C collegata slot suona lì, e se la
+stacchi torna all'altoparlante o alle cuffie senza riavviare il gioco.
 
 Log e diagnostica sono in `EASYROMS/slot/Logs` (`slot.log`, `slot-session.log`,
 `diag.txt`). `diag.txt` si rifà solo nelle prove da Tools. Per le tracce

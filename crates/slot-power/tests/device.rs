@@ -380,6 +380,18 @@ fn headphones_follow_the_detection_pin() {
     assert!(!platform(&d).headphones());
 }
 
+#[test]
+fn an_unreadable_jack_switch_falls_back_to_the_detection_pin() {
+    let d = sysfs("255", "87");
+    let event = d.path().join("class/input/event1/device");
+    fs::create_dir_all(&event).unwrap();
+    fs::write(event.join("name"), "rockchip,rk817-codec Headphones\n").unwrap();
+    with_jack(&d, "hi");
+    assert!(platform(&d).headphones());
+    with_jack(&d, "lo");
+    assert!(!platform(&d).headphones());
+}
+
 const MOUNTS: &str = "\
 /dev/mmcblk0p5 / ext4 rw,noatime 0 0
 /dev/mmcblk0p7 /mnt/sdcard vfat ro,noatime,fmask=0022,errors=remount-ro 0 0

@@ -18,6 +18,12 @@ const BACKLIGHT_CURVE: f64 = 1.75;
 
 const DEV_INPUT: &str = "/dev/input";
 
+// EVIOCGSW(8): the switch states of an input device, as a bitmask.
+#[cfg(unix)]
+const EVIOCGSW_8: c_ulong = 0x8008_451b;
+
+const SW_HEADPHONE_INSERT: u8 = 2;
+
 const RUN_DIR: &str = "/run";
 
 const CARD_LOG: &str = "/data/slot-card.log";
@@ -103,6 +109,7 @@ pub struct DevicePlatform {
     rtc: Option<PathBuf>,
     motor: Option<Motor>,
     led: Option<Led>,
+    jack: Option<PathBuf>,
 }
 
 impl DevicePlatform {
@@ -130,6 +137,7 @@ impl DevicePlatform {
         let battery = first_dir(&sysfs.join("class/power_supply"), is_battery);
         let rtc = first_dir(&sysfs.join("class/rtc"), |_| true);
         let motor = Motor::open(sysfs);
+        let jack = headphone_switch(sysfs);
         let led = first_dir(&sysfs.join("class/leds"), |d| {
             d.join("multi_intensity").is_file() || d.join("brightness").is_file()
         })
@@ -150,6 +158,7 @@ impl DevicePlatform {
             rtc,
             motor,
             led,
+            jack,
         }
     }
 
@@ -458,6 +467,35 @@ fn charge_at(dir: &Path) -> Charge {
     }
 }
 
+/// The codec's jack switch, as an input device, where the kernel has one
+/// (RK817 boards). Its state is the plug itself, whichever way the board wires
+/// the detection pin.
+fn headphone_switch(sysfs: &Path) -> Option<PathBuf> {
+    let events = fs::read_dir(sysfs.join("class/input")).ok()?;
+    events
+        .filter_map(Result::ok)
+        .map(|e| e.file_name())
+        .filter(|name| name.to_string_lossy().starts_with("event"))
+        .find(|name| {
+            fs::read_to_string(sysfs.join("class/input").join(name).join("device/name"))
+                .is_ok_and(|n| n.trim_end().ends_with("Headphones"))
+        })
+        .map(|name| Path::new(DEV_INPUT).join(name))
+}
+
+#[cfg(unix)]
+fn jack_plugged(dev: &Path) -> Option<bool> {
+    let file = fs::File::open(dev).ok()?;
+    let mut bits = [0u8; 8];
+    let got = unsafe { ioctl(file.as_raw_fd(), EVIOCGSW_8, bits.as_mut_ptr() as *mut c_void) };
+    (got >= 0).then_some(bits[0] & (1 << SW_HEADPHONE_INSERT) != 0)
+}
+
+#[cfg(not(unix))]
+fn jack_plugged(_dev: &Path) -> Option<bool> {
+    None
+}
+
 fn headphones_in(gpio: &str) -> bool {
     gpio.lines()
         .find(|l| l.contains("|Headphone detection"))
@@ -478,6 +516,9 @@ fn backlight_value(step: u8, max: u32) -> u32 {
 
 impl Platform for DevicePlatform {
     fn headphones(&self) -> bool {
+        if let Some(plugged) = self.jack.as_deref().and_then(jack_plugged) {
+            return plugged;
+        }
         fs::read_to_string(self.sysfs.join("kernel/debug/gpio")).is_ok_and(|g| headphones_in(&g))
     }
 
