@@ -103,6 +103,8 @@ log "clocks to performance: $(awk '{printf "%s %s; ", $1, $2}' "$CLOCKS")"
 
 if [ -n "$TRACE" ]; then
 	export SLOT_TRACE=1 SLOT_TRACE_LATENCY=1
+	# systemd only times the boot once it is over
+	(sleep 30; sh "$SYS/r36s-diag.sh" late > "$LOGS/boot-time.txt" 2>&1) &
 fi
 
 [ -f "$LOGS/slot.log" ] && mv -f "$LOGS/slot.log" "$LOGS/slot.log.1"
