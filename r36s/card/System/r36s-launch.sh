@@ -6,7 +6,7 @@
 #   r36s-launch.sh service   run as EmulationStation's replacement; falls back
 #                            to EmulationStation if slot is missing, if the
 #                            card holds a file named ARKOS, or if slot crashes
-SYS="$(cd "$(dirname "$0")" && pwd)"
+SYS="$(cd -P "$(dirname "$0")" && pwd)"
 SD="$(dirname "$SYS")"
 LOGS="$SD/Logs"
 MODE="${1:-test}"
@@ -30,7 +30,7 @@ arkos() {
 
 if [ "$MODE" = service ]; then
 	[ -e "$SD/ARKOS" ] || [ -e "$SD/ARKOS.txt" ] && arkos "ARKOS file on the card"
-	[ -x "$SYS/slot" ] || arkos "no slot binary"
+	[ -f "$SYS/slot" ] || arkos "no slot binary"
 fi
 
 export SLOT_ROOT="$SD"
@@ -59,7 +59,14 @@ done
 
 [ -f "$LOGS/slot.log" ] && mv -f "$LOGS/slot.log" "$LOGS/slot.log.1"
 log "start $MODE"
-"$SYS/slot" > "$LOGS/slot.log" 2>&1
+# exFAT keeps no exec bit of its own; if the mount gives none, load slot
+# through the dynamic linker instead.
+if [ -x "$SYS/slot" ]; then
+	"$SYS/slot" > "$LOGS/slot.log" 2>&1
+else
+	log "slot is not executable on this mount, starting it through ld.so"
+	/lib/ld-linux-aarch64.so.1 "$SYS/slot" > "$LOGS/slot.log" 2>&1
+fi
 status=$?
 log "slot exited $status"
 

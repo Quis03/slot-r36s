@@ -2,9 +2,17 @@
 # Make slot what the R36S boots into, in place of EmulationStation.
 # Undo with "Slot - Disinstalla", or put a file named ARKOS in EASYROMS/slot
 # from a PC to boot ArkOS once without uninstalling.
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# ArkOS opens Tools through the /opt/system/Tools symlink: resolve it before
+# going up, or ".." lands in /opt/system instead of on the card.
+ROOT="$(dirname "$(cd -P "$(dirname "$0")" && pwd)")"
+for r in "$ROOT" /roms /roms2; do
+	[ -f "$r/slot/System/slot" ] && ROOT="$r" && break
+done
 [ "$(id -u)" -eq 0 ] || exec sudo -n bash "$0" "$@"
 SD="$ROOT/slot"
+# an older version of this script made /opt/system/slot by mistake
+STRAY="$(cd "$(dirname "$0")/.." && pwd)/slot"
+[ "$STRAY" != "$SD" ] && [ -d "$STRAY" ] && [ ! -e "$STRAY/System" ] && rm -rf "$STRAY"
 LOG="$SD/Logs/install.log"
 TTY=/dev/tty1
 mkdir -p "$SD/Logs"
@@ -19,8 +27,8 @@ if ! systemctl cat emulationstation.service > /dev/null 2>&1; then
 	say "Manda $SD/Logs/diag.txt a chi ti aiuta col port."
 	sleep 6; exit 1
 fi
-if [ ! -x "$SD/System/slot" ]; then
-	say "Manca $SD/System/slot: installazione annullata."
+if [ ! -f "$SD/System/slot" ]; then
+	say "Non trovo slot sulla scheda (cercato in $ROOT, /roms, /roms2): installazione annullata."
 	sleep 6; exit 1
 fi
 
