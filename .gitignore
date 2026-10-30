@@ -24,3 +24,5 @@
 # Parallel implementation worktrees, never content.
 /.worktrees
 .superpowers/
+/target-linux
+/dist-r36s

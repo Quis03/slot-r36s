@@ -5,5 +5,6 @@ RUN sed -i -e 's|^deb http://deb.debian.org|# &|' -e 's|^# deb http://snapshot|d
       /etc/apt/sources.list \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-      cmake zip pkg-config libudev-dev libasound2-dev device-tree-compiler \
- && rm -rf /var/lib/apt/lists/*
+      cmake zip file pkg-config libudev-dev libasound2-dev device-tree-compiler \
+ && rm -rf /var/lib/apt/lists/* \
+ && curl -fsSL https://taskfile.dev/install.sh | sh -s -- -b /usr/local/bin
