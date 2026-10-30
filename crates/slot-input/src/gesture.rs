@@ -3,7 +3,8 @@ use crate::{Btn, Millis, RawEvent};
 pub const SELECT_CHORD_MS: Millis = 600;
 
 pub const SELECT_TAP_MS: Millis = 50;
-pub const MENU_TAP_MS: Millis = 250;
+// Long enough for a stiff button like the R36S FN key, short of the hold.
+pub const MENU_TAP_MS: Millis = 500;
 pub const MENU_DOUBLE_TAP_MS: Millis = 350;
 pub const MENU_HOLD_MS: Millis = 1000;
 pub const FF_DOUBLE_TAP_MS: Millis = 250;

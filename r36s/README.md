@@ -15,7 +15,8 @@ prende solo il posto di EmulationStation.
   mGBA non tiene i 60 fps sull'RK3326. Il selettore del core di slot vale
   ancora per il singolo gioco.
 - **Schermo 640×480**: il 3× del GBA non ci sta. Menu → Screen → GBA → Scale:
-  *Integer* è il 2× nitido (480×320), *Fit* riempie la larghezza a 2,67×.
+  *Integer* è il 2× nitido (480×320), *Fit* riempie la larghezza a 2,67× e
+  va usato con lo shader *Shimmerless*, che tiene i pixel regolari.
 
 ## Build
 
@@ -78,4 +79,7 @@ e al massimo, perché il volume lo regola slot; all'uscita tornano i livelli di
 ArkOS. Valori prima e dopo sono in `slot-session.log`.
 
 Log e diagnostica sono in `EASYROMS/slot/Logs` (`slot.log`, `slot-session.log`,
-`diag.txt`).
+`diag.txt`). `diag.txt` si rifà solo nelle prove da Tools. Per le tracce
+dettagliate (ogni tasto, ritmo dell'audio, latenza) crea un file vuoto
+`EASYROMS/slot/TRACE`: costano qualche frame, perché slot sincronizza la
+scheda ogni secondo mentre il log cresce, quindi toglilo finita la prova.

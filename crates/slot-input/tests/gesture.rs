@@ -228,6 +228,13 @@ fn menu_hold_ejects_at_the_hold_time_and_not_before() {
 }
 
 #[test]
+fn a_deliberate_menu_press_still_opens_the_menu() {
+    let mut g = gestures();
+    g.feed(Down(Menu), 0);
+    assert_eq!(g.feed(Up(Menu), 400), vec![QuickMenu]);
+}
+
+#[test]
 fn menu_hold_released_early_ejects_nothing() {
     let mut g = gestures();
     g.feed(Down(Menu), 0);

@@ -21,7 +21,7 @@ for g in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor /sys/class/dev
 done
 section audio; aplay -l 2>&1; amixer 2>&1; cat /etc/asound.conf 2>&1; aplay -L 2>&1 | head -20
 section mounts; grep -E 'roms|mmcblk' /proc/mounts
-section processes; ps -eo pid,user,comm 2>/dev/null | grep -Ev ' (kworker|ksoftirq|migration|rcu_|cpuhp|irq/)'
+section processes; ps -eo pid,user,pcpu,args 2>/dev/null | grep -v ' \['
 section emulationstation service
 systemctl cat emulationstation.service 2>&1 | head -40
 systemctl is-enabled emulationstation.service 2>&1

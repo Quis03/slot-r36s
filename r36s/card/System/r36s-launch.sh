@@ -53,7 +53,14 @@ if [ "$MODE" = test ]; then
 	export PATH="$SHIMS:$PATH"
 fi
 
-sh "$SYS/r36s-diag.sh" > "$LOGS/diag.txt" 2>&1
+# A file named TRACE in EASYROMS/slot turns on slot's own traces (every
+# button, audio pacing, input latency). They are off otherwise: while the
+# log grows, slot syncs the card every second, and that costs frames.
+TRACE=
+[ -e "$SD/TRACE" ] || [ -e "$SD/TRACE.txt" ] && TRACE=1
+if [ "$MODE" = test ] || [ -n "$TRACE" ]; then
+	sh "$SYS/r36s-diag.sh" > "$LOGS/diag.txt" 2>&1
+fi
 
 # ArkOS' hotkey daemon also turns the volume on Vol+/-, and slot already does.
 for d in ogage oga_events; do
@@ -84,8 +91,9 @@ for g in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor /sys/class/dev
 done
 log "clocks to performance: $(awk '{printf "%s %s; ", $1, $2}' "$CLOCKS")"
 
-# test runs log the audio pacing every 300 frames
-[ "$MODE" = test ] && export SLOT_TRACE=1
+if [ -n "$TRACE" ]; then
+	export SLOT_TRACE=1 SLOT_TRACE_LATENCY=1
+fi
 
 [ -f "$LOGS/slot.log" ] && mv -f "$LOGS/slot.log" "$LOGS/slot.log.1"
 log "start $MODE"
