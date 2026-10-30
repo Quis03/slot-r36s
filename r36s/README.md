@@ -70,14 +70,6 @@ ArkOS → Options → **Tools**:
 | **Slot - Installa** | La console si avvia direttamente in slot. Spegne anche Samba, SSH, Bluetooth, gli altri servizi di condivisione e gli aiutanti di ArkOS per EmulationStation (icona Wi-Fi, lettore video, sospensione automatica) |
 | **Slot - Disinstalla** | Torna EmulationStation all'avvio e riaccende i servizi spenti |
 
-All'avvio si vede solo il logo di ArkOS, poi slot. `System/r36s-boot.sh`, che
-il launcher rilancia a ogni avvio, aggiunge alla riga `bootargs` di
-`BOOT/boot.ini` `loglevel=0 vt.global_cursor_default=0 plymouth.enable=0`
-(niente testo del kernel, niente schermata con la versione di ArkOS e il
-cursore che lascia) e fa partire `play-video` solo se esiste
-`/boot/logo.mp4`, invece di aspettarlo 3 secondi. L'originale di
-`boot.ini` è in `BOOT/boot.ini.slot-bak`; Disinstalla toglie tutto.
-
 Gli sfondi sono PNG in `EASYROMS/slot/Wallpapers`, meglio se 640×480; si
 scelgono dal menu rapido (FN) → Wallpaper.
 

@@ -15,13 +15,6 @@ ES_USER="${SLOT_ES_USER:-ark}"
 
 mkdir -p "$LOGS" 2>/dev/null
 
-# Until slot shows its first frame the console under it is on screen: keep
-# it blank, without the blinking cursor.
-if [ "$MODE" = service ]; then
-	printf '\033[?25l\033[2J\033[H' > /dev/tty1 2>/dev/null
-	echo 0 > /sys/class/graphics/fbcon/cursor_blink 2>/dev/null
-fi
-
 log() {
 	echo "$(date '+%F %T') $*" >> "$LOGS/slot-session.log" 2>/dev/null
 }
@@ -36,7 +29,11 @@ arkos() {
 }
 
 if [ "$MODE" = service ]; then
-	sh "$SYS/r36s-boot.sh" 2>&1 | while read -r line; do log "$line"; done
+	# an earlier version made ArkOS skip its boot video wait; put it back
+	if [ -d /etc/systemd/system/play-video.service.d ]; then
+		rm -rf /etc/systemd/system/play-video.service.d && systemctl daemon-reload
+		log "play-video: back to ArkOS' own"
+	fi
 	[ -e "$SD/ARKOS" ] || [ -e "$SD/ARKOS.txt" ] && arkos "ARKOS file on the card"
 	[ -f "$SYS/slot" ] || arkos "no slot binary"
 fi
@@ -73,10 +70,24 @@ if [ "$MODE" = test ] || [ -n "$TRACE" ]; then
 	sh "$SYS/r36s-diag.sh" > "$LOGS/diag.txt" 2>&1
 fi
 
-# ArkOS' hotkey daemon also turns the volume on Vol+/-, and slot already does.
-for d in ogage oga_events; do
-	pkill -STOP -x "$d" 2>/dev/null && log "paused $d"
-done
+# ArkOS' hotkey daemons also turn the volume on Vol+/- and the screen on
+# Power, and slot already does both. They can come up after slot or be
+# restarted (ArkOS does on a USB DAC change), so keep pausing them while slot
+# runs, or Power blanks and wakes the screen twice.
+hold_daemons() {
+	paused=
+	while :; do
+		for pid in $(pgrep -x 'ogage|oga_events'); do
+			case " $paused " in *" $pid "*) continue ;; esac
+			kill -STOP "$pid" 2>/dev/null || continue
+			paused="$paused $pid"
+			log "paused $(cat "/proc/$pid/comm" 2>/dev/null) $pid"
+		done
+		sleep 1
+	done
+}
+hold_daemons &
+HOLD=$!
 
 # slot sets the volume itself, in software, so the RK817 codec has to be
 # routed to the speaker and left at full level while it runs. ArkOS' own
@@ -104,8 +115,6 @@ log "clocks to performance: $(awk '{printf "%s %s; ", $1, $2}' "$CLOCKS")"
 
 if [ -n "$TRACE" ]; then
 	export SLOT_TRACE=1 SLOT_TRACE_LATENCY=1
-	# systemd only times the boot once it is over
-	(sleep 30; sh "$SYS/r36s-diag.sh" late > "$LOGS/boot-time.txt" 2>&1) &
 fi
 
 [ -f "$LOGS/slot.log" ] && mv -f "$LOGS/slot.log" "$LOGS/slot.log.1"
@@ -123,7 +132,7 @@ jack() {
 	done
 	echo "no headphone switch"
 }
-log "start $MODE $(cut -d' ' -f1 /proc/uptime)s after power on, $(heat), $(jack)"
+log "start $MODE, $(heat), $(jack)"
 # exFAT keeps no exec bit of its own; if the mount gives none, load slot
 # through the dynamic linker instead.
 if [ -x "$SYS/slot" ]; then
@@ -135,9 +144,8 @@ fi
 status=$?
 log "slot exited $status, $(heat), $(jack), path $(amixer sget 'Playback Path' 2>&1 | grep -o "Item0: '[^']*'")"
 
-for d in ogage oga_events; do
-	pkill -CONT -x "$d" 2>/dev/null
-done
+kill "$HOLD" 2>/dev/null
+pkill -CONT -x 'ogage|oga_events' 2>/dev/null
 [ -f "$MIXER" ] && alsactl restore -f "$MIXER" 2>/dev/null
 while read -r g gov; do
 	echo "$gov" > "$g" 2>/dev/null

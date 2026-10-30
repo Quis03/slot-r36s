@@ -64,8 +64,6 @@ for unit in smbd nmbd ssh bluetooth ModemManager avahi-daemon cups \
 	say "Spento $unit"
 done
 
-sh "$SD/System/r36s-boot.sh" 2>&1 | while read -r line; do say "$line"; done
-
 systemctl daemon-reload
 say "Slot installato. Riavvio tra 3 secondi..."
 sync; sleep 3
