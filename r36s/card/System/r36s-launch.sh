@@ -57,6 +57,18 @@ for d in ogage oga_events; do
 	pkill -STOP -x "$d" 2>/dev/null && log "paused $d"
 done
 
+# slot sets the volume itself, in software, so the RK817 codec has to be
+# routed to the speaker and left at full level while it runs. ArkOS' own
+# levels come back when slot exits.
+MIXER=/tmp/slot-asound.state
+alsactl store -f "$MIXER" 2>/dev/null || rm -f "$MIXER"
+log "mixer before: path $(amixer sget 'Playback Path' 2>&1 | grep -o "Item0: '[^']*'"), $(amixer sget Playback 2>&1 | grep -m1 -o '\[[0-9]*%\]')"
+case "$(amixer sget 'Playback Path' 2>/dev/null)" in
+*"'OFF'"*|*"'RCV'"*) amixer -q sset 'Playback Path' SPK ;;
+esac
+amixer -q sset Playback 100% unmute 2>/dev/null || amixer -q sset Playback 100%
+log "mixer for slot: path $(amixer sget 'Playback Path' 2>&1 | grep -o "Item0: '[^']*'"), $(amixer sget Playback 2>&1 | grep -m1 -o '\[[0-9]*%\]')"
+
 [ -f "$LOGS/slot.log" ] && mv -f "$LOGS/slot.log" "$LOGS/slot.log.1"
 log "start $MODE"
 # exFAT keeps no exec bit of its own; if the mount gives none, load slot
@@ -73,6 +85,7 @@ log "slot exited $status"
 for d in ogage oga_events; do
 	pkill -CONT -x "$d" 2>/dev/null
 done
+[ -f "$MIXER" ] && alsactl restore -f "$MIXER" 2>/dev/null
 sync
 
 if [ "$MODE" = service ] && [ "$status" -ne 0 ]; then

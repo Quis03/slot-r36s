@@ -29,10 +29,19 @@ python3 r36s/prepare_sd.py
 
 Copia `slot/` e gli script in EASYROMS, estrae le ROM GB/GBC/GBA di ArkOS in
 `slot/Games`, porta i salvataggi `.srm` in `slot/Saves` come `.sav` e crea le
-etichette delle cartucce dalle box art. Le prende da quelle già scaricate da
-ArkOS oppure da thumbnails.libretro.com. Non cancella niente e si può rilanciare
-dopo aver aggiunto giochi. Per una ROM hack senza box art basta mettere un
-`.png` con lo stesso nome in `slot/Labels/GBA`.
+etichette delle cartucce. Per ogni gioco usa la prima che trova:
+
+1. la label vera della cartuccia dall'archivio di slot (art.slot-cfw.fyi, lo
+   stesso di Cart Studio), per checksum della ROM o per nome per le ROM hack;
+2. il logo del gioco, da quell'archivio o da quello scaricato da ArkOS, sopra
+   la box art sfumata;
+3. la box art, da ArkOS o da thumbnails.libretro.com.
+
+Non cancella niente e si può rilanciare dopo aver aggiunto giochi: crea solo le
+label che mancano, `--relabel` le rifà tutte. Se le cartelle di ArkOS non sono
+più sulla scheda, `--arkos` indica dove sono (per esempio un backup). Per un
+gioco senza niente basta mettere un `.png` con lo stesso nome in
+`slot/Labels/GBA`.
 
 Con `--clean`, dopo l'import, cancella tutto quello che slot non usa: le
 cartelle delle altre console, le copie ArkOS di gb/gbc/gba, BIOS, musiche,
@@ -59,4 +68,9 @@ Se slot si blocca o non parte, al riavvio torna da sola EmulationStation. Per
 avviare ArkOS una volta senza disinstallare, crea dal PC un file vuoto
 `EASYROMS/slot/ARKOS`.
 
-Log e diagnostica sono in `EASYROMS/slot/Logs` (`slot.log`, `diag.txt`).
+Mentre slot gira, il mixer del chip audio (RK817) è portato sull'altoparlante
+e al massimo, perché il volume lo regola slot; all'uscita tornano i livelli di
+ArkOS. Valori prima e dopo sono in `slot-session.log`.
+
+Log e diagnostica sono in `EASYROMS/slot/Logs` (`slot.log`, `slot-session.log`,
+`diag.txt`).

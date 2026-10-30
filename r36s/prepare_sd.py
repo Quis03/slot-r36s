@@ -12,8 +12,13 @@ deleted or changed outside EASYROMS/slot and EASYROMS/tools.
   2. copies the Slot scripts to EASYROMS/tools (ArkOS > Options > Tools)
   3. imports the ArkOS gb, gbc and gba folders: unzips ROMs into
      slot/Games/<GB|GBC|GBA>, and carries RetroArch .srm saves over as .sav
-  4. makes a cart label for every game that has none, from the box art
-     EmulationStation already scraped or from thumbnails.libretro.com
+  4. makes a cart label for every game that has none (every game with
+     --relabel), first found wins:
+       - the real cart label from slot's art set (art.slot-cfw.fyi, the one
+         Cart Studio uses), by ROM checksum, or by name for ROM hacks
+       - the game's logo, from that set or from EmulationStation's scrape,
+         over its box art
+       - the box art alone, from EmulationStation or thumbnails.libretro.com
 
   5. with --clean, once every game is in slot: deletes the folders of all the
      other systems, the ArkOS gb/gbc/gba copies, BIOS, music, videos and the
@@ -27,13 +32,16 @@ import argparse
 import difflib
 import html
 import io
+import json
 import re
 import shutil
 import subprocess
 import sys
+import unicodedata
 import urllib.parse
 import urllib.request
 import zipfile
+import zlib
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -60,6 +68,13 @@ LABEL_SIZE = {
 }
 
 THUMBS = "https://thumbnails.libretro.com"
+ART = "https://art.slot-cfw.fyi/"
+
+# art.slot-cfw.fyi turns away urllib's default agent
+USER_AGENT = "slot-r36s-prepare/1.0"
+
+# a logo label's ground when nothing better is known
+GROUND = "3a4a6b"
 
 FUZZY_CUTOFF = 0.88
 
@@ -69,6 +84,12 @@ KEEP = {"slot", "tools", "themes"}
 
 def say(*parts):
     print(*parts, flush=True)
+
+
+def get(url: str, timeout=30) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
 
 
 def copy_tree(src: Path, dst: Path, overwrite: bool):
@@ -180,6 +201,7 @@ def libretro_name(name: str) -> str:
 
 
 def bare_title(name: str) -> str:
+    name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
     title = re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", name)
     return " ".join(re.sub(r"[^a-z0-9]+", " ", title.lower()).split())
 
@@ -196,8 +218,7 @@ class Thumbnails:
         if system not in self.index:
             url = f"{THUMBS}/{urllib.parse.quote(LIBRETRO[system])}/Named_Boxarts/"
             try:
-                with urllib.request.urlopen(url, timeout=30) as r:
-                    page = r.read().decode("utf-8", "replace")
+                page = get(url).decode("utf-8", "replace")
                 hrefs = re.findall(r'href="([^"]+\.png)"', page)
                 self.index[system] = [html.unescape(urllib.parse.unquote(h)).rsplit("/", 1)[-1][:-4] for h in hrefs]
             except OSError as e:
@@ -226,9 +247,40 @@ class Thumbnails:
         return max(same, key=lambda n: (len(tags(n) & want), "Europe" in n or "USA" in n, -len(n)))
 
     def fetch(self, system: str, name: str) -> bytes:
-        url = f"{THUMBS}/{urllib.parse.quote(LIBRETRO[system])}/Named_Boxarts/{urllib.parse.quote(name)}.png"
-        with urllib.request.urlopen(url, timeout=30) as r:
-            return r.read()
+        return get(f"{THUMBS}/{urllib.parse.quote(LIBRETRO[system])}/Named_Boxarts/{urllib.parse.quote(name)}.png")
+
+
+class SlotArt:
+    """slot's own art set: real cart labels (support-texture) and logos
+    (wheel), filed by the ROM's CRC32, plus ROM hacks filed by name."""
+
+    def __init__(self):
+        self._index = None
+
+    def index(self):
+        if self._index is None:
+            try:
+                self._index = json.loads(get(ART + "index.json", timeout=60))
+            except (OSError, ValueError) as e:
+                say(f"  {ART} unreachable: {e}")
+                self._index = {}
+        return self._index
+
+    def entry(self, system: str, rom: Path):
+        """The set's entry for a ROM and how it was found, or (None, None)."""
+        index = self.index()
+        crc = "%08X" % zlib.crc32(rom.read_bytes())
+        if crc in index:
+            return index[crc], f"CRC {crc}"
+        title = bare_title(rom.stem)
+        for entry in index.values():
+            names = [entry.get("name", ""), *entry.get("aka", [])]
+            if entry.get("platform") == system and title in {bare_title(n) for n in names}:
+                return entry, entry["name"]
+        return None, None
+
+    def fetch(self, path: str) -> bytes:
+        return get(ART + urllib.parse.quote(path))
 
 
 def make_label(art: bytes, size, out: Path):
@@ -244,23 +296,97 @@ def make_label(art: bytes, size, out: Path):
     back.save(out, optimize=True)
 
 
-def scrape(root: Path, games, card: Path):
+def make_logo_label(logo: bytes, back, ground: str, size, out: Path):
+    """A label in the manner of a real one: the box art as the picture, or a
+    plain ground without one, and the game's logo across the middle."""
+    from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+
+    w, h = size
+    if back:
+        base = ImageOps.fit(Image.open(io.BytesIO(back)).convert("RGB"), size, Image.LANCZOS)
+        base = base.filter(ImageFilter.GaussianBlur(w // 55))
+        base = ImageEnhance.Brightness(base).enhance(0.66)
+    else:
+        rgb = tuple(int(ground[i : i + 2], 16) for i in (0, 2, 4))
+        base = Image.new("RGB", size)
+        for y in range(h):
+            k = 1.18 - 0.4 * y / h
+            base.paste(tuple(min(255, int(c * k)) for c in rgb), (0, y, w, y + 1))
+    canvas = base.convert("RGBA")
+    mark = Image.open(io.BytesIO(logo)).convert("RGBA")
+    box = mark.getchannel("A").getbbox()
+    if box:
+        mark = mark.crop(box)
+    mark = ImageOps.contain(mark, (int(w * 0.86), int(h * 0.74)), Image.LANCZOS)
+    at = ((w - mark.width) // 2, (h - mark.height) // 2)
+    shadow = Image.new("RGBA", mark.size, (0, 0, 0, 0))
+    shadow.putalpha(mark.getchannel("A").point(lambda a: a * 3 // 5))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(w // 220 + 2))
+    canvas.alpha_composite(shadow, (at[0] + w // 160, at[1] + w // 160))
+    canvas.alpha_composite(mark, at)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    canvas.convert("RGB").save(out, optimize=True)
+
+
+def first_file(*paths):
+    for path in paths:
+        if path.is_file():
+            return path.read_bytes()
+    return None
+
+
+def scrape(root: Path, games, arkos: Path, relabel: bool):
     try:
         import PIL  # noqa: F401
     except ImportError:
         say("  Pillow missing: pip install pillow, or pass --no-scrape")
         return
     thumbs = Thumbnails()
+    slot_art = SlotArt()
     missing = []
-    for system, stem, src in games:
+    for system, rom in games:
+        stem = rom.stem
         out = root / "Labels" / system / f"{stem}.png"
-        if out.exists():
+        if out.exists() and not relabel:
             continue
-        art, source = None, None
-        for candidate in [src / "images" / f"{stem}.png", src / "images" / f"{stem}-image.png"]:
-            if candidate.is_file():
-                art, source = candidate.read_bytes(), "ArkOS scrape"
-                break
+        images = arkos / system.lower() / "images"
+        entry, found = slot_art.entry(system, rom)
+        entry = entry or {}
+        try:
+            if entry.get("support-texture"):
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_bytes(slot_art.fetch(entry["support-texture"]))
+                say(f"  cart {system}/{out.name}  <- real label, {found}")
+                continue
+        except OSError as e:
+            say(f"  cart {stem}: {e}")
+        box = first_file(images / f"{stem}.png", images / f"{stem}-image.png", images / f"{stem}-image.jpg")
+        box_source = "ArkOS scrape"
+        if box is None:
+            name = thumbs.match(system, stem)
+            if name:
+                try:
+                    box, box_source = thumbs.fetch(system, name), f"libretro: {name}"
+                except OSError as e:
+                    say(f"  art  {stem}: {e}")
+        logo, logo_source = None, None
+        if entry.get("wheel"):
+            try:
+                logo, logo_source = slot_art.fetch(entry["wheel"]), f"slot art, {found}"
+            except OSError as e:
+                say(f"  logo {stem}: {e}")
+        if logo is None:
+            logo = first_file(images / f"{stem}-marquee.png")
+            logo_source = "ArkOS scrape"
+        if logo is not None:
+            try:
+                ground = (entry.get("look") or {}).get("ground") or GROUND
+                make_logo_label(logo, box, ground, LABEL_SIZE[system], out)
+                say(f"  logo {system}/{out.name}  <- {logo_source}" + (f", over {box_source} box art" if box else ""))
+                continue
+            except Exception as e:  # a broken image should not stop the rest
+                say(f"  logo {stem}: {e}")
+        art, source = box, box_source
         if art is None:
             name = thumbs.match(system, stem)
             if name:
@@ -309,7 +435,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--card", type=Path, default=Path("/Volumes/EASYROMS"), help="the EASYROMS partition")
     ap.add_argument("--dist", type=Path, default=REPO / "dist-r36s", help="output of r36s/build.sh")
-    ap.add_argument("--no-scrape", action="store_true", help="skip box art")
+    ap.add_argument("--no-scrape", action="store_true", help="skip cart labels")
+    ap.add_argument("--relabel", action="store_true", help="remake every label, not only the missing ones")
+    ap.add_argument("--arkos", type=Path, help="where the ArkOS gb, gbc and gba folders are, if not on the card (a backup)")
     ap.add_argument("--no-import", action="store_true", help="skip ROMs and saves from the ArkOS folders")
     ap.add_argument("--clean", action="store_true", help="then delete everything slot does not use (back the card up first)")
     args = ap.parse_args()
@@ -318,27 +446,30 @@ def main():
     if not (card / "tools").is_dir() or not ((card / "gba").is_dir() or (card / "slot").is_dir()):
         sys.exit(f"{card} does not look like an ArkOS EASYROMS partition")
 
+    arkos = args.arkos or card
+
     say("== slot")
     root = install_slot(card, args.dist)
-    games, skipped = [], []
+    imported, skipped = [], []
     if not args.no_import:
         say("== ROMs")
-        games = import_roms(card, root, skipped)
+        imported = import_roms(arkos, root, skipped)
         say("== saves")
-        import_saves(root, games)
-    else:
-        for system in set(SYSTEMS.values()):
-            for rom in sorted((root / "Games" / system).glob("*")):
-                if not rom.name.startswith("."):
-                    games.append((system, rom.stem, card / system.lower()))
+        import_saves(root, imported)
+    games = [
+        (system, rom)
+        for system in sorted(set(SYSTEMS.values()))
+        for rom in sorted((root / "Games" / system).glob("*"))
+        if not rom.name.startswith(".") and rom.suffix.lower() in SYSTEMS
+    ]
     if not args.no_scrape:
-        say("== art")
-        scrape(root, games, card)
+        say("== labels")
+        scrape(root, games, arkos, args.relabel)
     if args.clean:
-        if args.no_import:
-            sys.exit("--clean needs the import, drop --no-import")
+        if args.no_import or args.arkos:
+            sys.exit("--clean needs the import from the card itself, drop --no-import and --arkos")
         say("== clean")
-        clean(card, games, skipped)
+        clean(card, imported, skipped)
     if sys.platform == "darwin":
         subprocess.run(["dot_clean", "-m", str(root)], check=False)
         subprocess.run(["dot_clean", "-m", str(card / "tools")], check=False)

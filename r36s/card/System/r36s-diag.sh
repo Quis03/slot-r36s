@@ -15,7 +15,7 @@ section sysfs
 for d in /sys/class/backlight/* /sys/class/power_supply/* /sys/class/leds/*; do
 	printf '%s: ' "$d"; cat "$d/type" "$d/max_brightness" "$d/capacity" "$d/status" 2>/dev/null | tr '\n' ' '; echo
 done
-section audio; aplay -l 2>&1; amixer scontrols 2>&1
+section audio; aplay -l 2>&1; amixer 2>&1; cat /etc/asound.conf 2>&1; aplay -L 2>&1 | head -20
 section mounts; grep -E 'roms|mmcblk' /proc/mounts
 section processes; ps -eo pid,user,comm 2>/dev/null | grep -Ev ' (kworker|ksoftirq|migration|rcu_|cpuhp|irq/)'
 section emulationstation service
