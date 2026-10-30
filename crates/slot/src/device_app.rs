@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use slot::frontend::Frontend;
 use slot::input::DeviceInput;
 use slot::panel_turn::{panel_turn, PanelTurn};
-use slot_gfx::{Compositor, FbdevSurface, Surface};
+use slot_gfx::{device_surface, Compositor};
 use slot_power::{trace_first_frame, DevicePlatform};
 
 const CARD: &str = "/mnt/sdcard";
@@ -77,7 +77,7 @@ pub fn run() {
     let root = std::env::var_os("SLOT_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(CARD));
-    let mut surface = match FbdevSurface::new() {
+    let mut surface = match device_surface() {
         Ok(s) => s,
         Err(e) => {
             eprintln!("slot: {e}");
@@ -85,7 +85,7 @@ pub fn run() {
         }
     };
     slot::boot_time::mark("surface");
-    let mut compositor = match Compositor::new(&surface) {
+    let mut compositor = match Compositor::new(&*surface) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("slot: {e}");
