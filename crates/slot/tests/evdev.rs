@@ -397,3 +397,68 @@ fn only_the_skus_nextui_lists_with_a_left_stick_have_one() {
         assert!(!has_left_stick(t), "{t}");
     }
 }
+
+mod odroidgo3 {
+    use super::*;
+    use slot::input::evdev::{to_raw_in, Ev, Hat, Layout, ODROIDGO3_PAD};
+
+    const EV_ABS: u16 = 0x03;
+
+    fn press(code: u16) -> Option<RawEvent> {
+        decode(&packet(EV_KEY, code, 1)).and_then(|ev| to_raw_in(Layout::OdroidGo3, ev))
+    }
+
+    #[test]
+    fn the_r36s_pad_is_recognised_by_name() {
+        assert_eq!(Layout::for_name(ODROIDGO3_PAD), Layout::OdroidGo3);
+        assert_eq!(Layout::for_name("GO-Super Gamepad\n"), Layout::OdroidGo3);
+        assert_eq!(Layout::for_name("H700 Gamepad"), Layout::Anbernic);
+    }
+
+    #[test]
+    fn face_buttons_follow_the_printed_labels() {
+        assert_eq!(press(0x131), Some(RawEvent::Down(Btn::A)));
+        assert_eq!(press(0x130), Some(RawEvent::Down(Btn::B)));
+        assert_eq!(press(0x133), Some(RawEvent::Down(Btn::X)));
+        assert_eq!(press(0x134), Some(RawEvent::Down(Btn::Y)));
+    }
+
+    #[test]
+    fn the_dpad_arrives_as_keys() {
+        assert_eq!(press(0x220), Some(RawEvent::Down(Btn::Up)));
+        assert_eq!(press(0x221), Some(RawEvent::Down(Btn::Down)));
+        assert_eq!(press(0x222), Some(RawEvent::Down(Btn::Left)));
+        assert_eq!(press(0x223), Some(RawEvent::Down(Btn::Right)));
+    }
+
+    #[test]
+    fn shoulders_select_start_and_fn() {
+        assert_eq!(press(0x136), Some(RawEvent::Down(Btn::L1)));
+        assert_eq!(press(0x137), Some(RawEvent::Down(Btn::R1)));
+        assert_eq!(press(0x138), Some(RawEvent::Down(Btn::L2)));
+        assert_eq!(press(0x139), Some(RawEvent::Down(Btn::R2)));
+        assert_eq!(press(0x2c0), Some(RawEvent::Down(Btn::Select)));
+        assert_eq!(press(0x2c1), Some(RawEvent::Down(Btn::Start)));
+        assert_eq!(press(0x2c4), Some(RawEvent::Down(Btn::Menu)));
+        assert_eq!(press(0x2c2), None);
+    }
+
+    #[test]
+    fn the_anbernic_map_is_untouched() {
+        let ev = decode(&packet(EV_KEY, 0x130, 1)).unwrap();
+        assert_eq!(to_raw(ev), Some(RawEvent::Down(Btn::A)));
+    }
+
+    #[test]
+    fn the_left_stick_is_abs_x_y_with_a_relative_deadzone() {
+        let dead = Layout::OdroidGo3.stick_deadzone(Some(1800));
+        assert_eq!(dead, 720);
+        let mut hat = Hat::for_layout(Layout::OdroidGo3, dead);
+        hat.steer_with_stick(true);
+        let abs = |code, value| Ev { kind: EV_ABS, code, value };
+        assert!(hat.feed(abs(0x00, 500)).is_empty());
+        assert_eq!(hat.feed(abs(0x00, 1000)), vec![RawEvent::Down(Btn::Right)]);
+        assert_eq!(hat.feed(abs(0x03, 1500)), Vec::<RawEvent>::new());
+        assert_eq!(hat.feed(abs(0x01, -1500)), vec![RawEvent::Down(Btn::Up)]);
+    }
+}

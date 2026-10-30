@@ -14,10 +14,17 @@ pub const ABS_HAT0X: u16 = 0x10;
 pub const ABS_HAT0Y: u16 = 0x11;
 pub const ABS_LSX: u16 = 0x02;
 pub const ABS_LSY: u16 = 0x03;
+pub const ABS_X: u16 = 0x00;
+pub const ABS_Y: u16 = 0x01;
 
 pub const STICK_DEADZONE: i32 = 2048;
 
-const LEFT_STICK_TARGETS: [&str; 6] = [
+pub const ODROIDGO3_PAD: &str = "GO-Super Gamepad";
+
+const ODROIDGO3_DEADZONE_PERCENT: i32 = 40;
+
+const LEFT_STICK_TARGETS: [&str; 7] = [
+    "r36s",
     "rg34xxsp",
     "rg35xxh",
     "rg35xxpro",
@@ -30,30 +37,78 @@ pub fn has_left_stick(target: &str) -> bool {
     LEFT_STICK_TARGETS.contains(&target)
 }
 
-#[derive(Default)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum Layout {
+    #[default]
+    Anbernic,
+    OdroidGo3,
+}
+
+impl Layout {
+    pub fn for_name(name: &str) -> Layout {
+        match name.trim() {
+            ODROIDGO3_PAD => Layout::OdroidGo3,
+            _ => Layout::Anbernic,
+        }
+    }
+
+    pub fn stick_axes(self) -> (u16, u16) {
+        match self {
+            Layout::Anbernic => (ABS_LSX, ABS_LSY),
+            Layout::OdroidGo3 => (ABS_X, ABS_Y),
+        }
+    }
+
+    pub fn stick_deadzone(self, axis_max: Option<i32>) -> i32 {
+        match (self, axis_max) {
+            (Layout::OdroidGo3, Some(max)) if max > 0 => max * ODROIDGO3_DEADZONE_PERCENT / 100,
+            _ => STICK_DEADZONE,
+        }
+    }
+}
+
 pub struct Hat {
     hat: [i32; 2],
     stick: [i32; 2],
     steers: bool,
+    axes: (u16, u16),
+    deadzone: i32,
+}
+
+impl Default for Hat {
+    fn default() -> Self {
+        Hat::for_layout(Layout::Anbernic, STICK_DEADZONE)
+    }
 }
 
 impl Hat {
+    pub fn for_layout(layout: Layout, deadzone: i32) -> Self {
+        Hat {
+            hat: [0; 2],
+            stick: [0; 2],
+            steers: false,
+            axes: layout.stick_axes(),
+            deadzone,
+        }
+    }
+
     pub fn steer_with_stick(&mut self, on: bool) {
         self.steers = on;
     }
 
     pub fn feed(&mut self, ev: Ev) -> Vec<RawEvent> {
+        let dead = self.deadzone;
         let tilt = |v: i32| match v {
-            v if v > STICK_DEADZONE => 1,
-            v if v < -STICK_DEADZONE => -1,
+            v if v > dead => 1,
+            v if v < -dead => -1,
             _ => 0,
         };
         let steer = |v: i32| if self.steers { tilt(v) } else { 0 };
         let (axis, from_stick, value) = match ev.code {
             ABS_HAT0X => (0, false, ev.value.signum()),
             ABS_HAT0Y => (1, false, ev.value.signum()),
-            ABS_LSX => (0, true, steer(ev.value)),
-            ABS_LSY => (1, true, steer(ev.value)),
+            c if c == self.axes.0 => (0, true, steer(ev.value)),
+            c if c == self.axes.1 => (1, true, steer(ev.value)),
             _ => return Vec::new(),
         };
         let was = self.held(axis);
@@ -102,8 +157,12 @@ pub fn decode(bytes: &[u8]) -> Option<Ev> {
 }
 
 pub fn to_raw(ev: Ev) -> Option<RawEvent> {
+    to_raw_in(Layout::Anbernic, ev)
+}
+
+pub fn to_raw_in(layout: Layout, ev: Ev) -> Option<RawEvent> {
     let btn = match ev.kind {
-        EV_KEY => code_to_btn(ev.code)?,
+        EV_KEY => code_to_btn_in(layout, ev.code)?,
         EV_SW if ev.code == SW_LID => Btn::Lid,
         _ => return None,
     };
@@ -112,6 +171,37 @@ pub fn to_raw(ev: Ev) -> Option<RawEvent> {
         1 => Some(RawEvent::Down(btn)),
         _ => None,
     }
+}
+
+pub fn code_to_btn_in(layout: Layout, code: u16) -> Option<Btn> {
+    match layout {
+        Layout::Anbernic => code_to_btn(code),
+        Layout::OdroidGo3 => odroidgo3_btn(code),
+    }
+}
+
+fn odroidgo3_btn(code: u16) -> Option<Btn> {
+    Some(match code {
+        0x220 => Btn::Up,
+        0x221 => Btn::Down,
+        0x222 => Btn::Left,
+        0x223 => Btn::Right,
+        0x131 => Btn::A,
+        0x130 => Btn::B,
+        0x133 => Btn::X,
+        0x134 => Btn::Y,
+        0x136 => Btn::L1,
+        0x137 => Btn::R1,
+        0x138 => Btn::L2,
+        0x139 => Btn::R2,
+        0x2c0 => Btn::Select,
+        0x2c1 => Btn::Start,
+        0x2c4 => Btn::Menu,
+        115 => Btn::VolUp,
+        114 => Btn::VolDown,
+        116 => Btn::Power,
+        _ => return None,
+    })
 }
 
 pub fn code_to_btn(code: u16) -> Option<Btn> {
@@ -134,12 +224,34 @@ pub fn code_to_btn(code: u16) -> Option<Btn> {
     })
 }
 
-const WANTED: [u16; 15] = [
-    0x130, 0x131, 0x132, 0x133, 0x134, 0x135, 0x136, 0x137, 0x138, 0x13a, 0x13b, 0x162, 115, 114,
-    116,
+const WANTED: [u16; 17] = [
+    0x130, 0x131, 0x132, 0x133, 0x134, 0x135, 0x136, 0x137, 0x138, 0x13a, 0x13b, 0x162, 0x220,
+    0x2c4, 115, 114, 116,
 ];
 
 pub use slot_power::has_bit;
+
+#[cfg(unix)]
+extern "C" {
+    fn ioctl(fd: std::ffi::c_int, request: std::ffi::c_ulong, ...) -> std::ffi::c_int;
+}
+
+#[cfg(unix)]
+const EVIOCGABS: std::ffi::c_ulong = 0x8018_4540;
+
+#[cfg(unix)]
+pub fn abs_max(node: &std::fs::File, axis: u16) -> Option<i32> {
+    use std::os::unix::io::AsRawFd;
+    let mut info = [0i32; 6];
+    let request = EVIOCGABS + std::ffi::c_ulong::from(axis);
+    let rc = unsafe { ioctl(node.as_raw_fd(), request, info.as_mut_ptr()) };
+    (rc == 0).then(|| info[1].abs().max(info[2].abs()))
+}
+
+#[cfg(not(unix))]
+pub fn abs_max(_node: &std::fs::File, _axis: u16) -> Option<i32> {
+    None
+}
 
 pub fn pick_devices(dev: &Path, sys: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(dev) else {

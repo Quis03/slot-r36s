@@ -8,7 +8,8 @@ use std::time::Instant;
 use slot_input::{Btn, InputSource, Millis, RawEvent};
 
 use super::evdev::{
-    decode, device_name, pick_devices, to_raw, Ev, Hat, EVENT_BYTES, EV_ABS, EV_KEY, EV_SYN,
+    abs_max, decode, device_name, pick_devices, to_raw_in, Ev, Hat, Layout, EVENT_BYTES, EV_ABS,
+    EV_KEY, EV_SYN,
 };
 use super::trace;
 
@@ -40,11 +41,9 @@ impl DeviceInput {
         let pending: Arc<Mutex<Vec<RawEvent>>> = Arc::new(Mutex::new(Vec::new()));
         let stick = Arc::new(AtomicBool::new(false));
         for node in pick_devices(dev, sys) {
-            eprintln!(
-                "slot: input {} ({})",
-                node.display(),
-                device_name(sys, &node)
-            );
+            let pad = device_name(sys, &node);
+            let layout = Layout::for_name(&pad);
+            eprintln!("slot: input {} ({pad}, {layout:?})", node.display());
             quicken_poll(sys, &node);
             let queue = pending.clone();
             let steers = stick.clone();
@@ -52,7 +51,7 @@ impl DeviceInput {
             let trace = trace.clone();
             let spawned = std::thread::Builder::new()
                 .name(format!("slot-input-{name}"))
-                .spawn(move || read_node(&node, &queue, &steers, trace.as_deref()));
+                .spawn(move || read_node(&node, layout, &queue, &steers, trace.as_deref()));
             if let Err(e) = spawned {
                 eprintln!("slot: input {name}: {e}");
             }
@@ -93,6 +92,7 @@ fn quicken_poll(sys: &Path, node: &Path) {
 
 fn read_node(
     node: &Path,
+    layout: Layout,
     queue: &Mutex<Vec<RawEvent>>,
     steers: &AtomicBool,
     trace: Option<&Trace>,
@@ -101,7 +101,6 @@ fn read_node(
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| node.display().to_string());
-    let mut hat = Hat::default();
     let mut file = match File::open(node) {
         Ok(f) => f,
         Err(e) => {
@@ -109,6 +108,8 @@ fn read_node(
             return;
         }
     };
+    let deadzone = layout.stick_deadzone(abs_max(&file, layout.stick_axes().0));
+    let mut hat = Hat::for_layout(layout, deadzone);
     let mut buf = [0u8; EVENT_BYTES * 16];
     loop {
         let read = match file.read(&mut buf) {
@@ -133,7 +134,7 @@ fn read_node(
                     hat.steer_with_stick(steers.load(Ordering::Relaxed));
                     events.extend(hat.feed(ev));
                 }
-                _ => events.extend(to_raw(ev)),
+                _ => events.extend(to_raw_in(layout, ev)),
             }
         }
         if events.is_empty() {
