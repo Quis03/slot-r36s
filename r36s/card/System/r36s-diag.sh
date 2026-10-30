@@ -32,6 +32,28 @@ section processes; ps -eo pid,user,pcpu,args 2>/dev/null | grep -v ' \['
 section emulationstation service
 systemctl cat emulationstation.service 2>&1 | head -40
 systemctl is-enabled emulationstation.service 2>&1
+section boot
+cut -d' ' -f1 /proc/uptime
+ls -la /boot 2>&1; cat /boot/boot.ini 2>&1
+systemd-analyze 2>&1; systemd-analyze blame 2>&1 | head -30
+systemd-analyze critical-chain emulationstation.service 2>&1
+echo "--- what the frontend waits for"
+for u in play-video firstboot; do
+	systemctl cat "$u.service" 2>&1 | head -30
+	systemctl is-enabled "$u.service" 2>&1
+	for f in $(systemctl show -p ExecStart --value "$u.service" 2>/dev/null | grep -o 'path=[^ ;]*' | cut -d= -f2); do
+		echo "--- $f"; head -60 "$f" 2>&1
+	done
+done
+echo "--- splash"
+readlink -f /etc/alternatives/default.plymouth 2>&1; cat /etc/plymouth/plymouthd.conf 2>&1
+ls /usr/share/plymouth/themes 2>&1
+systemctl is-enabled getty@tty1 plymouth-quit-wait plymouth-start 2>&1
+echo "--- writes to the console"
+grep -rlE 'tty1|/dev/tty|setterm|plymouth|ArkOS' /etc/systemd/system /etc/rc.local /etc/profile.d \
+	/usr/local/bin /home/ark/.config/*.sh /etc/update-motd.d 2>/dev/null | head -40
+crontab -l -u root 2>&1; crontab -l -u ark 2>&1
+systemctl list-unit-files --state=enabled --no-pager 2>&1
 section logind; grep -rh '^Handle\|^#Handle' /etc/systemd/logind.conf /etc/systemd/logind.conf.d 2>/dev/null
 section sudo; id; sudo -n true 2>&1 && echo "sudo ok"
 section arkos helpers

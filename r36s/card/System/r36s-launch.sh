@@ -15,6 +15,13 @@ ES_USER="${SLOT_ES_USER:-ark}"
 
 mkdir -p "$LOGS" 2>/dev/null
 
+# Until slot shows its first frame the console under it is on screen: keep
+# it blank, without the blinking cursor.
+if [ "$MODE" = service ]; then
+	printf '\033[?25l\033[2J\033[H' > /dev/tty1 2>/dev/null
+	echo 0 > /sys/class/graphics/fbcon/cursor_blink 2>/dev/null
+fi
+
 log() {
 	echo "$(date '+%F %T') $*" >> "$LOGS/slot-session.log" 2>/dev/null
 }
@@ -113,7 +120,7 @@ jack() {
 	done
 	echo "no headphone switch"
 }
-log "start $MODE, $(heat), $(jack)"
+log "start $MODE $(cut -d' ' -f1 /proc/uptime)s after power on, $(heat), $(jack)"
 # exFAT keeps no exec bit of its own; if the mount gives none, load slot
 # through the dynamic linker instead.
 if [ -x "$SYS/slot" ]; then

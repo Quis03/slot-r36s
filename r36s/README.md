@@ -70,6 +70,11 @@ ArkOS → Options → **Tools**:
 | **Slot - Installa** | La console si avvia direttamente in slot. Spegne anche Samba, SSH, Bluetooth, gli altri servizi di condivisione e gli aiutanti di ArkOS per EmulationStation (icona Wi-Fi, lettore video, sospensione automatica) |
 | **Slot - Disinstalla** | Torna EmulationStation all'avvio e riaccende i servizi spenti |
 
+Per un avvio senza cursore né testo del kernel, nella riga `bootargs` di
+`BOOT/boot.ini` ci sono anche `loglevel=0 vt.global_cursor_default=0`
+(l'originale è in `BOOT/boot.ini.slot-bak`). Un aggiornamento di ArkOS
+riscrive `boot.ini` e li toglie.
+
 Se slot si blocca o non parte, al riavvio torna da sola EmulationStation. Per
 avviare ArkOS una volta senza disinstallare, crea dal PC un file vuoto
 `EASYROMS/slot/ARKOS`.
