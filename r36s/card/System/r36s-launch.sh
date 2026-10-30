@@ -36,6 +36,7 @@ arkos() {
 }
 
 if [ "$MODE" = service ]; then
+	sh "$SYS/r36s-boot.sh" 2>&1 | while read -r line; do log "$line"; done
 	[ -e "$SD/ARKOS" ] || [ -e "$SD/ARKOS.txt" ] && arkos "ARKOS file on the card"
 	[ -f "$SYS/slot" ] || arkos "no slot binary"
 fi
