@@ -3,7 +3,7 @@
 # Undo with "Slot - Disinstalla", or put a file named ARKOS in EASYROMS/slot
 # from a PC to boot ArkOS once without uninstalling.
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-[ "$(id -u)" -eq 0 ] || exec sudo -n "$0" "$@"
+[ "$(id -u)" -eq 0 ] || exec sudo -n bash "$0" "$@"
 SD="$ROOT/slot"
 LOG="$SD/Logs/install.log"
 TTY=/dev/tty1
@@ -33,7 +33,7 @@ RequiresMountsFor=$ROOT
 [Service]
 User=root
 ExecStart=
-ExecStart=$SD/System/r36s-launch.sh service
+ExecStart=/bin/sh $SD/System/r36s-launch.sh service
 UNIT
 
 # slot sleeps the screen on a short press of Power itself; stop logind
