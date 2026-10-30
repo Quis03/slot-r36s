@@ -34,6 +34,17 @@ ArkOS oppure da thumbnails.libretro.com. Non cancella niente e si può rilanciar
 dopo aver aggiunto giochi. Per una ROM hack senza box art basta mettere un
 `.png` con lo stesso nome in `slot/Labels/GBA`.
 
+Con `--clean`, dopo l'import, cancella tutto quello che slot non usa: le
+cartelle delle altre console, le copie ArkOS di gb/gbc/gba, BIOS, musiche,
+video e i tool di ArkOS. Restano `slot/`, i tool di Slot e i temi di
+EmulationStation, che serve ancora come ripiego. Si ferma se qualche gioco
+non è stato portato in `slot/Games`. Fai prima un backup della scheda:
+
+```bash
+diskutil list external   # trova la SD, per esempio disk4
+sudo dd if=/dev/rdisk4 bs=4m status=progress | zstd -T0 -3 -o r36s-sd.img.zst
+```
+
 ## Sulla console
 
 ArkOS → Options → **Tools**:
@@ -41,8 +52,8 @@ ArkOS → Options → **Tools**:
 | Voce | Cosa fa |
 |---|---|
 | **Slot** | Prova slot. Spegni/Riavvia dentro slot ti riportano ad ArkOS |
-| **Slot - Installa** | La console si avvia direttamente in slot |
-| **Slot - Disinstalla** | Torna EmulationStation all'avvio |
+| **Slot - Installa** | La console si avvia direttamente in slot. Spegne anche Samba, SSH, Bluetooth e gli altri servizi di condivisione |
+| **Slot - Disinstalla** | Torna EmulationStation all'avvio e riaccende i servizi spenti |
 
 Se slot si blocca o non parte, al riavvio torna da sola EmulationStation. Per
 avviare ArkOS una volta senza disinstallare, crea dal PC un file vuoto

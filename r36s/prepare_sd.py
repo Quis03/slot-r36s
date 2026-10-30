@@ -4,8 +4,8 @@
   python3 r36s/prepare_sd.py                     # card mounted at /Volumes/EASYROMS
   python3 r36s/prepare_sd.py --card /media/EASYROMS --no-scrape
 
-Additive: ArkOS keeps working and nothing on the card is deleted or changed
-outside EASYROMS/slot and EASYROMS/tools.
+Additive unless --clean: ArkOS keeps working and nothing on the card is
+deleted or changed outside EASYROMS/slot and EASYROMS/tools.
 
   1. copies dist-r36s/slot (from r36s/build.sh) to EASYROMS/slot, refreshing
      System/ and leaving saves, states and settings alone
@@ -14,6 +14,11 @@ outside EASYROMS/slot and EASYROMS/tools.
      slot/Games/<GB|GBC|GBA>, and carries RetroArch .srm saves over as .sav
   4. makes a cart label for every game that has none, from the box art
      EmulationStation already scraped or from thumbnails.libretro.com
+
+  5. with --clean, once every game is in slot: deletes the folders of all the
+     other systems, the ArkOS gb/gbc/gba copies, BIOS, music, videos and the
+     ArkOS tools, keeping slot/, the Slot tools and the EmulationStation themes
+     (EmulationStation is still the fallback when slot cannot start)
 
 Needs Pillow for step 4 (pip install pillow); --no-scrape skips it.
 """
@@ -58,6 +63,9 @@ THUMBS = "https://thumbnails.libretro.com"
 
 FUZZY_CUTOFF = 0.88
 
+# what --clean leaves at the top of EASYROMS
+KEEP = {"slot", "tools", "themes"}
+
 
 def say(*parts):
     print(*parts, flush=True)
@@ -100,8 +108,9 @@ def rom_in_zip(zf: zipfile.ZipFile):
     return None, None
 
 
-def import_roms(card: Path, root: Path):
-    """Returns [(system, stem, arkos folder)] for every game now in slot."""
+def import_roms(card: Path, root: Path, skipped: list):
+    """Returns [(system, stem, arkos folder)] for every game now in slot, and
+    adds to skipped the ROMs it could not bring over."""
     games = []
     for folder in ARKOS_FOLDERS:
         src = card / folder
@@ -118,6 +127,7 @@ def import_roms(card: Path, root: Path):
                         info, inner = rom_in_zip(zf)
                         if info is None:
                             say(f"  skip {path.name}: no GB/GBC/GBA ROM inside")
+                            skipped.append(path)
                             continue
                         system = SYSTEMS[inner]
                         out = root / "Games" / system / f"{stem}{inner}"
@@ -128,6 +138,7 @@ def import_roms(card: Path, root: Path):
                             say(f"  rom  {system}/{out.name}")
                 except zipfile.BadZipFile:
                     say(f"  skip {path.name}: not a readable zip")
+                    skipped.append(path)
                     continue
             elif ext in SYSTEMS:
                 system = SYSTEMS[ext]
@@ -138,6 +149,7 @@ def import_roms(card: Path, root: Path):
                     say(f"  rom  {system}/{out.name}")
             elif ext == ".7z":
                 say(f"  skip {path.name}: unzip it to .{folder} first, slot reads no .7z")
+                skipped.append(path)
                 continue
             else:
                 continue
@@ -270,24 +282,48 @@ def scrape(root: Path, games, card: Path):
         say(f"  drop a box art .png into {root}/Labels/<GBA|GB|GBC> named after the ROM, or make one at https://studio.slot-cfw.fyi")
 
 
+def clean(card: Path, games, skipped):
+    if skipped:
+        say("  not cleaning, these would be lost: " + "; ".join(p.name for p in skipped))
+        return
+    for system, stem, _ in games:
+        if not any((card / "slot" / "Games" / system).glob(f"{glob_escape(stem)}.*")):
+            say(f"  not cleaning, {system}/{stem} is not in slot/Games")
+            return
+    for path in sorted(card.iterdir()):
+        if path.name.startswith("._") and path.is_file():
+            path.unlink()  # macOS metadata
+            continue
+        if path.name.startswith(".") or path.name in KEEP or not path.is_dir():
+            continue
+        shutil.rmtree(path)
+        say(f"  rm   {path.name}/")
+    for path in sorted((card / "tools").iterdir()):
+        if path.name.startswith("Slot") or path.name.startswith("."):
+            continue
+        shutil.rmtree(path) if path.is_dir() else path.unlink()
+        say(f"  rm   tools/{path.name}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--card", type=Path, default=Path("/Volumes/EASYROMS"), help="the EASYROMS partition")
     ap.add_argument("--dist", type=Path, default=REPO / "dist-r36s", help="output of r36s/build.sh")
     ap.add_argument("--no-scrape", action="store_true", help="skip box art")
     ap.add_argument("--no-import", action="store_true", help="skip ROMs and saves from the ArkOS folders")
+    ap.add_argument("--clean", action="store_true", help="then delete everything slot does not use (back the card up first)")
     args = ap.parse_args()
 
     card = args.card
-    if not (card / "tools").is_dir() or not (card / "gba").is_dir():
+    if not (card / "tools").is_dir() or not ((card / "gba").is_dir() or (card / "slot").is_dir()):
         sys.exit(f"{card} does not look like an ArkOS EASYROMS partition")
 
     say("== slot")
     root = install_slot(card, args.dist)
-    games = []
+    games, skipped = [], []
     if not args.no_import:
         say("== ROMs")
-        games = import_roms(card, root)
+        games = import_roms(card, root, skipped)
         say("== saves")
         import_saves(root, games)
     else:
@@ -298,6 +334,11 @@ def main():
     if not args.no_scrape:
         say("== art")
         scrape(root, games, card)
+    if args.clean:
+        if args.no_import:
+            sys.exit("--clean needs the import, drop --no-import")
+        say("== clean")
+        clean(card, games, skipped)
     if sys.platform == "darwin":
         subprocess.run(["dot_clean", "-m", str(root)], check=False)
         subprocess.run(["dot_clean", "-m", str(card / "tools")], check=False)

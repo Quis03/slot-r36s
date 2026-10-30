@@ -44,6 +44,15 @@ cat > /etc/systemd/logind.conf.d/10-slot.conf <<CONF
 HandlePowerKey=ignore
 CONF
 
+# Sharing and remote services slot never uses. Remember which were on, so
+# "Slot - Disinstalla" turns the same ones back on.
+STATE=/etc/slot-disabled-services
+for unit in smbd nmbd ssh bluetooth ModemManager avahi-daemon cups; do
+	[ "$(systemctl is-enabled "$unit" 2>/dev/null)" = enabled ] || continue
+	systemctl disable --now "$unit" >> "$LOG" 2>&1 && echo "$unit" >> "$STATE"
+	say "Spento $unit"
+done
+
 systemctl daemon-reload
 say "Slot installato. Riavvio tra 3 secondi..."
 sync; sleep 3
