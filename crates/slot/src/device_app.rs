@@ -17,6 +17,9 @@ const MARGIN: Duration = Duration::from_micros(1500);
 
 const LOG_SYNC: Duration = Duration::from_secs(1);
 
+// Frames between the pace lines a run prints when it missed a latch.
+const PACE_EVERY: u32 = 3600;
+
 struct Pacer {
     last_return: Option<Instant>,
     period: Duration,
@@ -39,6 +42,13 @@ impl Pacer {
     }
 
     fn wait(&self) {
+        // SLOT_PACER=off starts each frame as soon as the last one is shown. A
+        // surface whose swap also waits on the GPU, like KMS on Mali, needs
+        // that headroom more than it needs the latency the late start saves.
+        static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        if *OFF.get_or_init(|| std::env::var("SLOT_PACER").as_deref() == Ok("off")) {
+            return;
+        }
         let Some(last) = self.last_return else {
             return;
         };
@@ -183,19 +193,27 @@ pub fn run() {
         let swap_took = swap.elapsed();
         slot::latency::swapped(swap_took.as_secs_f64() * 1000.0);
         let dropped = pacer.swapped(work, swap_took > Duration::from_millis(1));
-        if slot::latency::tracing() {
-            frames += 1;
-            missed += u32::from(dropped);
-            early += u32::from(swap_took > pacer.period / 2);
-            stale += u32::from(late);
-            if frames == 600 {
-                eprintln!(
-                    "slot: pace: 600 frames, {missed} missed a latch, {early} drawn early, {stale} stale, work {:.1} ms, period {:.2} ms",
-                    pacer.work.as_secs_f64() * 1e3,
-                    pacer.period.as_secs_f64() * 1e3
-                );
+        frames += 1;
+        missed += u32::from(dropped);
+        early += u32::from(swap_took > pacer.period / 2);
+        stale += u32::from(late);
+        if !slot::latency::tracing() {
+            if frames == PACE_EVERY {
+                if missed > 0 {
+                    eprintln!(
+                        "slot: pace: {PACE_EVERY} frames, {missed} missed a latch, {stale} stale, work {:.1} ms",
+                        pacer.work.as_secs_f64() * 1e3
+                    );
+                }
                 (frames, missed, early, stale) = (0, 0, 0, 0);
             }
+        } else if frames == 600 {
+            eprintln!(
+                "slot: pace: 600 frames, {missed} missed a latch, {early} drawn early, {stale} stale, work {:.1} ms, period {:.2} ms",
+                pacer.work.as_secs_f64() * 1e3,
+                pacer.period.as_secs_f64() * 1e3
+            );
+            (frames, missed, early, stale) = (0, 0, 0, 0);
         }
         if !drawn {
             drawn = true;

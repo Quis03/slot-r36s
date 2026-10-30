@@ -40,6 +40,9 @@ export BASEOS_MODEL="R36S"
 # mGBA cannot hold full speed on the RK3326; gpSP's dynarec can. A game set
 # to mGBA in slot's core picker keeps it.
 export SLOT_GBA_CORE=gpsp
+# Start each frame right after the last flip: the KMS swap also waits on the
+# GPU, which the late start's 1.5 ms margin does not cover.
+export SLOT_PACER=off
 
 if [ "$MODE" = test ]; then
 	# slot powers off with poweroff(8) and restarts with reboot(8); in a test
@@ -96,7 +99,12 @@ if [ -n "$TRACE" ]; then
 fi
 
 [ -f "$LOGS/slot.log" ] && mv -f "$LOGS/slot.log" "$LOGS/slot.log.1"
-log "start $MODE"
+heat() {
+	t=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
+	f=$(cat /sys/devices/system/cpu/cpufreq/policy0/scaling_cur_freq 2>/dev/null)
+	echo "cpu ${t%???}°C at ${f%???} MHz"
+}
+log "start $MODE, $(heat)"
 # exFAT keeps no exec bit of its own; if the mount gives none, load slot
 # through the dynamic linker instead.
 if [ -x "$SYS/slot" ]; then
@@ -106,7 +114,7 @@ else
 	/lib/ld-linux-aarch64.so.1 "$SYS/slot" > "$LOGS/slot.log" 2>&1
 fi
 status=$?
-log "slot exited $status"
+log "slot exited $status, $(heat)"
 
 for d in ogage oga_events; do
 	pkill -CONT -x "$d" 2>/dev/null
