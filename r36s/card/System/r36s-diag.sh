@@ -15,6 +15,10 @@ section sysfs
 for d in /sys/class/backlight/* /sys/class/power_supply/* /sys/class/leds/*; do
 	printf '%s: ' "$d"; cat "$d/type" "$d/max_brightness" "$d/capacity" "$d/status" 2>/dev/null | tr '\n' ' '; echo
 done
+section clocks
+for g in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor /sys/class/devfreq/*/governor; do
+	d="$(dirname "$g")"; echo "$g: $(cat "$g") of $(cat "${g%governor}available_governors" 2>/dev/null), now $(cat "$d/scaling_cur_freq" "$d/cur_freq" 2>/dev/null)"
+done
 section audio; aplay -l 2>&1; amixer 2>&1; cat /etc/asound.conf 2>&1; aplay -L 2>&1 | head -20
 section mounts; grep -E 'roms|mmcblk' /proc/mounts
 section processes; ps -eo pid,user,comm 2>/dev/null | grep -Ev ' (kworker|ksoftirq|migration|rcu_|cpuhp|irq/)'

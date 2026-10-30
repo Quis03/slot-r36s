@@ -63,11 +63,26 @@ done
 MIXER=/tmp/slot-asound.state
 alsactl store -f "$MIXER" 2>/dev/null || rm -f "$MIXER"
 log "mixer before: path $(amixer sget 'Playback Path' 2>&1 | grep -o "Item0: '[^']*'"), $(amixer sget Playback 2>&1 | grep -m1 -o '\[[0-9]*%\]')"
-case "$(amixer sget 'Playback Path' 2>/dev/null)" in
+case "$(amixer sget 'Playback Path' 2>/dev/null | grep Item0)" in
 *"'OFF'"*|*"'RCV'"*) amixer -q sset 'Playback Path' SPK ;;
 esac
 amixer -q sset Playback 100% unmute 2>/dev/null || amixer -q sset Playback 100%
 log "mixer for slot: path $(amixer sget 'Playback Path' 2>&1 | grep -o "Item0: '[^']*'"), $(amixer sget Playback 2>&1 | grep -m1 -o '\[[0-9]*%\]')"
+
+# ArkOS keeps the CPU, GPU and memory clocks low outside games and raises
+# them only when it starts an emulator. In slot a game can start at any time,
+# so run at full clocks throughout; the governors come back when slot exits.
+CLOCKS=/tmp/slot-governors
+: > "$CLOCKS"
+for g in /sys/devices/system/cpu/cpufreq/policy*/scaling_governor /sys/class/devfreq/*/governor; do
+	[ -w "$g" ] && grep -qw performance "${g%governor}available_governors" 2>/dev/null || continue
+	echo "$g $(cat "$g")" >> "$CLOCKS"
+	echo performance > "$g"
+done
+log "clocks to performance: $(awk '{printf "%s %s; ", $1, $2}' "$CLOCKS")"
+
+# test runs log the audio pacing every 300 frames
+[ "$MODE" = test ] && export SLOT_TRACE=1
 
 [ -f "$LOGS/slot.log" ] && mv -f "$LOGS/slot.log" "$LOGS/slot.log.1"
 log "start $MODE"
@@ -86,6 +101,9 @@ for d in ogage oga_events; do
 	pkill -CONT -x "$d" 2>/dev/null
 done
 [ -f "$MIXER" ] && alsactl restore -f "$MIXER" 2>/dev/null
+while read -r g gov; do
+	echo "$gov" > "$g" 2>/dev/null
+done < "$CLOCKS"
 sync
 
 if [ "$MODE" = service ] && [ "$status" -ne 0 ]; then
