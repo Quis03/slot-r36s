@@ -1,0 +1,78 @@
+name: r36s-release
+
+on:
+  push:
+    tags: ['v*-r36s.*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: R36S release
+    if: github.repository == 'Quis03/slot-r36s'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: r36s/build.sh
+
+      - name: Check the binary
+        run: |
+          set -eu
+          file dist-r36s/slot/System/slot
+          file dist-r36s/slot/System/slot | grep -q 'ELF 64-bit.*ARM aarch64'
+
+      - name: Test
+        run: |
+          set -u
+          docker run --rm --platform linux/arm64 \
+            -v "$PWD":/src -w /src \
+            -v slot-cargo:/usr/local/cargo/registry \
+            -v slot-rustup:/usr/local/rustup \
+            -e SLOT_SILENT=1 \
+            slot-r36s-build sh -c 'cargo test --target-dir target-linux --workspace --lib --tests --no-fail-fast' \
+            > test.log 2>&1
+          status=$?
+          cat test.log
+          echo "cargo test exited with $status"
+          failed="$(sed -n 's/^test \(.*\) \.\.\. FAILED$/\1/p' test.log | sort -u)"
+          echo "failed tests: ${failed:-none}"
+          if grep -q '^error: could not compile' test.log; then
+            echo "::error::a crate did not compile"; exit 1
+          fi
+          if ! grep -q '^test result:' test.log; then
+            echo "::error::no test results"; exit 1
+          fi
+          unexpected="$(printf '%s\n' "$failed" | grep -v -x -e '' -e 'an_unchanged_battery_save_is_not_rewritten' || true)"
+          if [ -n "$unexpected" ]; then
+            echo "::error::unexpected test failures: $unexpected"; exit 1
+          fi
+          if [ "$status" -ne 0 ] && [ -z "$failed" ]; then
+            echo "::error::cargo test failed without a failing test"; exit 1
+          fi
+
+      - name: Package
+        id: package
+        run: |
+          set -eu
+          zip="slot-r36s-${GITHUB_REF_NAME}.zip"
+          stage="$RUNNER_TEMP/stage"
+          rm -rf "$stage"
+          mkdir -p "$stage"
+          cp -a dist-r36s/slot dist-r36s/tools "$stage/"
+          cp r36s/prepare_sd.py LICENSE "$stage/"
+          test -x "$stage/slot/System/slot"
+          find "$stage" -name '*.sh' -print0 | xargs -0 -n1 sh -c 'test -x "$0" || { echo "not executable: $0"; exit 1; }'
+          (cd "$stage" && zip -qry "$GITHUB_WORKSPACE/$zip" slot tools prepare_sd.py LICENSE)
+          unzip -Z "$zip" | head -40
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZIP: ${{ steps.package.outputs.zip }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$ZIP" --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" --notes-file r36s/release-notes.md --verify-tag
