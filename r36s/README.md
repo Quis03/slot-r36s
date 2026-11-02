@@ -1,89 +1,93 @@
-# slot su R36S (ArkOS)
+# slot on the R36S (ArkOS)
 
-Port di [slot](https://github.com/BrandonKowalski/slot) sull'R36S. Gira sopra
-ArkOS, che resta installato: kernel, driver e pannello restano i suoi, e slot
-prende solo il posto di EmulationStation.
+A port of [slot](https://github.com/BrandonKowalski/slot) to the R36S. It runs
+on top of ArkOS, which stays installed: the kernel, drivers and panel setup
+are ArkOS' own, and slot only takes EmulationStation's place.
 
-## Cosa cambia rispetto a slot per Anbernic
+## What differs from slot for Anbernic
 
-- **Schermo**: backend KMS/GBM (`crates/slot-gfx/src/kms.rs`). Il vecchio
-  backend fbdev resta come ripiego (`SLOT_GFX=fbdev|kms` per forzarne uno).
-- **Tasti**: mappa per il joypad "GO-Super Gamepad" (`crates/slot/src/input/evdev.rs`).
-  FN = Menu, SELECT/START come scritti, croce e levetta sinistra muovono.
-- **Avvio**: `card/System/r36s-launch.sh` e gli script in `card/tools/`.
-- **Core GBA**: gpSP di default (`SLOT_GBA_CORE=gpsp` nel launcher), perché
-  mGBA non tiene i 60 fps sull'RK3326. Il selettore del core di slot vale
-  ancora per il singolo gioco.
-- **Schermo 640×480**: il 3× del GBA non ci sta. Menu → Screen → GBA → Scale:
-  *Integer* è il 2× nitido (480×320), *Fit* riempie la larghezza a 2,67× e
-  va usato con lo shader *Shimmerless*, che tiene i pixel regolari.
+- **Display**: a KMS/GBM backend (`crates/slot-gfx/src/kms.rs`). The old fbdev
+  backend stays as a fallback (`SLOT_GFX=fbdev|kms` forces one).
+- **Buttons**: a map for the "GO-Super Gamepad" joypad (`crates/slot/src/input/evdev.rs`).
+  FN = Menu, SELECT/START as labelled, the d-pad and left stick move.
+- **Startup**: `card/System/r36s-launch.sh` and the scripts in `card/tools/`.
+- **GBA core**: gpSP by default (`SLOT_GBA_CORE=gpsp` in the launcher), because
+  mGBA cannot hold 60 fps on the RK3326. slot's core picker still works per game.
+- **640×480 panel**: the GBA's 3× does not fit. Menu → Screen → GBA → Scale:
+  *Integer* is a sharp 2× (480×320), *Fit* fills the width at 2.67× and is
+  meant for the *Shimmerless* shader, which keeps the pixels even.
+- **Audio**: speaker, headphone jack and USB-C sound cards. slot plays on a
+  USB-C card while one is plugged in, and goes back to the speaker or
+  headphones when it is pulled out, without restarting the game.
 
 ## Build
 
 ```bash
-r36s/build.sh          # crea dist-r36s/ (serve Docker o Colima)
-r36s/build.sh test     # test della workspace in Linux
+r36s/build.sh          # makes dist-r36s/ (needs Docker or Colima)
+r36s/build.sh test     # runs the workspace tests in Linux
 ```
 
-## Preparare la scheda
+## Preparing the card
 
-Con la SD inserita nel Mac:
+With the SD card in the computer:
 
 ```bash
-python3 r36s/prepare_sd.py
+python3 r36s/prepare_sd.py                              # macOS, card at /Volumes/EASYROMS
+python3 r36s/prepare_sd.py --card /media/$USER/EASYROMS # Linux
 ```
 
-Copia `slot/` e gli script in EASYROMS, estrae le ROM GB/GBC/GBA di ArkOS in
-`slot/Games`, porta i salvataggi `.srm` in `slot/Saves` come `.sav` e crea le
-etichette delle cartucce. Per ogni gioco usa la prima che trova:
+It copies `slot/` and the tools to EASYROMS, unzips the ArkOS GB/GBC/GBA ROMs
+into `slot/Games`, carries the `.srm` saves over to `slot/Saves` as `.sav` and
+makes the cart labels. For each game it uses the first it finds:
 
-1. la label vera della cartuccia dall'archivio di slot (art.slot-cfw.fyi, lo
-   stesso di Cart Studio), per checksum della ROM o per nome per le ROM hack;
-2. il logo del gioco, da quell'archivio o da quello scaricato da ArkOS, sopra
-   la box art sfumata;
-3. la box art, da ArkOS o da thumbnails.libretro.com.
+1. the real cart label from slot's art set (art.slot-cfw.fyi, the one Cart
+   Studio uses), by ROM checksum, or by name for ROM hacks;
+2. the game's logo, from that set or from ArkOS' own scrape, over its blurred
+   box art;
+3. the box art, from ArkOS or thumbnails.libretro.com.
 
-Non cancella niente e si può rilanciare dopo aver aggiunto giochi: crea solo le
-label che mancano, `--relabel` le rifà tutte. Se le cartelle di ArkOS non sono
-più sulla scheda, `--arkos` indica dove sono (per esempio un backup). Per un
-gioco senza niente basta mettere un `.png` con lo stesso nome in
-`slot/Labels/GBA`.
+It deletes nothing and can be run again after adding games: it only makes the
+labels that are missing, and `--relabel` remakes them all. If the ArkOS folders
+are no longer on the card, `--arkos` says where they are (a backup, for
+example). For a game with nothing, put a `.png` with the same name in
+`slot/Labels/GBA` (or `GB`, `GBC`).
 
-Con `--clean`, dopo l'import, cancella tutto quello che slot non usa: le
-cartelle delle altre console, le copie ArkOS di gb/gbc/gba, BIOS, musiche,
-video e i tool di ArkOS. Restano `slot/`, i tool di Slot e i temi di
-EmulationStation, che serve ancora come ripiego. Si ferma se qualche gioco
-non è stato portato in `slot/Games`. Fai prima un backup della scheda:
+With `--clean`, after the import, it deletes everything slot does not use: the
+folders of the other systems, the ArkOS gb/gbc/gba copies, BIOS, music, videos
+and the ArkOS tools. `slot/`, the Slot tools and the EmulationStation themes
+stay, since EmulationStation is still the fallback. It stops if a game did not
+make it into `slot/Games`. Back the card up first:
 
 ```bash
-diskutil list external   # trova la SD, per esempio disk4
-sudo dd if=/dev/rdisk4 bs=4m status=progress | zstd -T0 -3 -o r36s-sd.img.zst
+diskutil list external   # find the card, for example disk4
+sudo dd if=/dev/rdisk4 bs=4m status=progress | gzip > r36s-sd.img.gz
 ```
 
-## Sulla console
+## On the console
 
 ArkOS → Options → **Tools**:
 
-| Voce | Cosa fa |
+| Entry | What it does |
 |---|---|
-| **Slot** | Prova slot. Spegni/Riavvia dentro slot ti riportano ad ArkOS |
-| **Slot - Installa** | La console si avvia direttamente in slot. Spegne anche Samba, SSH, Bluetooth, gli altri servizi di condivisione e gli aiutanti di ArkOS per EmulationStation (icona Wi-Fi, lettore video, sospensione automatica) |
-| **Slot - Disinstalla** | Torna EmulationStation all'avvio e riaccende i servizi spenti |
+| **Slot** | Try slot. Power off and Restart inside slot bring you back to ArkOS |
+| **Slot - Install** | The console boots straight into slot. Also turns off Samba, SSH, Bluetooth, the other sharing services and the ArkOS helpers that only serve EmulationStation (Wi-Fi icon, video player buttons, auto suspend) |
+| **Slot - Uninstall** | EmulationStation is back at boot, and the services Install turned off are on again |
 
-Gli sfondi sono PNG in `EASYROMS/slot/Wallpapers`, meglio se 640×480; si
-scelgono dal menu rapido (FN) → Wallpaper.
+Wallpapers are PNGs in `EASYROMS/slot/Wallpapers`, best at 640×480; pick one
+from the quick menu (FN) → Wallpaper.
 
-Se slot si blocca o non parte, al riavvio torna da sola EmulationStation. Per
-avviare ArkOS una volta senza disinstallare, crea dal PC un file vuoto
-`EASYROMS/slot/ARKOS`.
+If slot hangs or does not start, EmulationStation comes back by itself at the
+next boot. To start ArkOS once without uninstalling, create an empty file
+`EASYROMS/slot/ARKOS` from a computer.
 
-Mentre slot gira, il mixer del chip audio (RK817) è portato sull'altoparlante
-e al massimo, perché il volume lo regola slot; all'uscita tornano i livelli di
-ArkOS. Valori prima e dopo sono in `slot-session.log`. Con una scheda audio USB-C collegata slot suona lì, e se la
-stacchi torna all'altoparlante o alle cuffie senza riavviare il gioco.
+While slot runs, the audio codec's mixer (RK817) is routed to the speaker and
+set to full, since slot sets the volume itself; ArkOS' levels come back when
+it exits. The values before and after are in `slot-session.log`. ArkOS' hotkey
+daemons (`ogage`, `oga_events`) are paused for as long as slot runs, because
+slot handles volume and Power itself.
 
-Log e diagnostica sono in `EASYROMS/slot/Logs` (`slot.log`, `slot-session.log`,
-`diag.txt`). `diag.txt` si rifà solo nelle prove da Tools. Per le tracce
-dettagliate (ogni tasto, ritmo dell'audio, latenza) crea un file vuoto
-`EASYROMS/slot/TRACE`: costano qualche frame, perché slot sincronizza la
-scheda ogni secondo mentre il log cresce, quindi toglilo finita la prova.
+Logs and diagnostics are in `EASYROMS/slot/Logs` (`slot.log`,
+`slot-session.log`, `diag.txt`). `diag.txt` is only rewritten on test runs
+from Tools. For detailed traces (every button, audio pacing, latency) create
+an empty file `EASYROMS/slot/TRACE`: they cost a few frames, because slot
+syncs the card every second while the log grows, so remove it afterwards.

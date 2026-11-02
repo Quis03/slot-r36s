@@ -3,6 +3,7 @@
 
   python3 r36s/prepare_sd.py                     # card mounted at /Volumes/EASYROMS
   python3 r36s/prepare_sd.py --card /media/EASYROMS --no-scrape
+  python3 prepare_sd.py                          # from an unzipped release
 
 Additive unless --clean: ArkOS keeps working and nothing on the card is
 deleted or changed outside EASYROMS/slot and EASYROMS/tools.
@@ -44,7 +45,11 @@ import zipfile
 import zlib
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent
+# A release zip holds slot/ and tools/ next to this script; a checkout has
+# them in dist-r36s/ once r36s/build.sh has run.
+DIST = HERE if (HERE / "slot").is_dir() and (HERE / "tools").is_dir() else REPO / "dist-r36s"
 
 SYSTEMS = {
     ".gba": "GBA",
@@ -80,6 +85,8 @@ FUZZY_CUTOFF = 0.88
 
 # what --clean leaves at the top of EASYROMS
 KEEP = {"slot", "tools", "themes"}
+# the Install and Uninstall tools had Italian names before the first release
+OLD_TOOLS = ("Slot - Installa.sh", "Slot - Disinstalla.sh")
 
 
 def say(*parts):
@@ -116,6 +123,8 @@ def install_slot(card: Path, dist: Path):
     tools.mkdir(exist_ok=True)
     for script in sorted((dist / "tools").glob("*.sh")):
         shutil.copyfile(script, tools / script.name)
+    for old in OLD_TOOLS:
+        (tools / old).unlink(missing_ok=True)
     say(f"slot  -> {root}")
     say(f"tools -> {tools}: " + ", ".join(p.name for p in sorted((dist / 'tools').glob('*.sh'))))
     return root
@@ -434,7 +443,7 @@ def clean(card: Path, games, skipped):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--card", type=Path, default=Path("/Volumes/EASYROMS"), help="the EASYROMS partition")
-    ap.add_argument("--dist", type=Path, default=REPO / "dist-r36s", help="output of r36s/build.sh")
+    ap.add_argument("--dist", type=Path, default=DIST, help="output of r36s/build.sh, or the unzipped release")
     ap.add_argument("--no-scrape", action="store_true", help="skip cart labels")
     ap.add_argument("--relabel", action="store_true", help="remake every label, not only the missing ones")
     ap.add_argument("--arkos", type=Path, help="where the ArkOS gb, gbc and gba folders are, if not on the card (a backup)")

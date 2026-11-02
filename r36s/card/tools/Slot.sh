@@ -9,7 +9,7 @@ for r in "$ROOT" /roms /roms2; do
 done
 [ "$(id -u)" -eq 0 ] || exec sudo -n bash "$0" "$@"
 if [ ! -f "$ROOT/slot/System/r36s-launch.sh" ]; then
-	echo "Non trovo slot sulla scheda (cercato in $ROOT, /roms, /roms2)." > /dev/tty1 2>/dev/null
+	echo "slot is not on the card (looked in $ROOT, /roms, /roms2)." > /dev/tty1 2>/dev/null
 	sleep 6; exit 1
 fi
 exec sh "$ROOT/slot/System/r36s-launch.sh" test

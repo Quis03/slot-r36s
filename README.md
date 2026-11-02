@@ -12,101 +12,121 @@
 
 ---
 
-# slot su R36S
+# slot on the R36S
 
 > [!NOTE]
-> Questo è un fork non ufficiale che porta slot sull'**R36S con ArkOS**. Il
-> progetto originale, per l'Anbernic RG SP, è
-> [BrandonKowalski/slot](https://github.com/BrandonKowalski/slot): i problemi
-> di questo port vanno segnalati qui, non lì.
+> This is an unofficial fork that ports slot to the **R36S running ArkOS**.
+> The original project, for the Anbernic RG SP, is
+> [BrandonKowalski/slot](https://github.com/BrandonKowalski/slot). Please
+> report problems with this port here, not there.
 
-slot prende il posto di EmulationStation: la console si accende direttamente
-sulla libreria di cartucce GB, GBC e GBA. ArkOS resta installato sotto (kernel,
-driver, schermo) e torna con un tasto se serve.
+slot takes EmulationStation's place: the console boots straight into a shelf
+of GB, GBC and GBA carts. ArkOS stays installed underneath (kernel, drivers,
+display) and is one step away if you need it.
 
-Cosa cambia rispetto a slot per RG SP: schermo via KMS, mappa dei tasti
-dell'R36S, gpSP come core GBA di default (mGBA non tiene i 60 fps sull'RK3326),
-audio da altoparlante, jack e schede USB-C, label vere delle cartucce anche per
-le ROM hack. I dettagli tecnici sono in [`r36s/README.md`](r36s/README.md).
+What differs from slot on the RG SP: KMS display output, the R36S button map,
+gpSP as the default GBA core (mGBA cannot hold 60 fps on the RK3326), audio
+through the speaker, headphone jack and USB-C sound cards, and real cart
+labels, ROM hacks included. The technical details are in
+[`r36s/README.md`](r36s/README.md).
 
-## Cosa serve
+## What you need
 
-- Un R36S con **ArkOS** che si avvia e i giochi GB/GBC/GBA nella partizione
-  EASYROMS. Provato con ArkOS per R36S (Ubuntu 19.10, kernel 4.4.189), pannello 4.
-- Un Mac o un PC Linux con `git`, Python 3 e **Docker** (sul Mac va bene anche
-  [Colima](https://github.com/abiosoft/colima)): slot si compila per ARM dentro
-  un container.
-- Per le label delle cartucce: `pip3 install pillow`.
+- An R36S running **ArkOS** that boots, with your GB/GBC/GBA games on the
+  EASYROMS partition. Tested on ArkOS for the R36S (Ubuntu 19.10, kernel
+  4.4.189), panel 4.
+- A computer that can read the SD card, and Python 3 to prepare it.
+- For cart labels: `pip3 install pillow`.
 
-## Installazione
+## Install
 
-1. **Fai un backup della SD.** Sul Mac, con la scheda inserita:
+1. **Back up the SD card.** On a Mac, with the card inserted:
 
    ```bash
-   diskutil list external   # trova la SD, per esempio disk4
+   diskutil list external   # find the card, for example disk4
    sudo dd if=/dev/rdisk4 bs=4m status=progress | gzip > r36s-sd.img.gz
    ```
 
-2. **Compila slot.** La prima volta scarica la toolchain e ci mette un po':
+   On Windows, [Win32 Disk Imager](https://sourceforge.net/projects/win32diskimager/)
+   can save the whole card to a file.
+
+2. **Download** `slot-r36s-*.zip` from the
+   [latest release](https://github.com/Quis03/slot-r36s/releases/latest) and
+   unzip it.
+
+3. **Prepare the card.** With the card in the computer, from the unzipped
+   folder:
 
    ```bash
-   git clone -b r36s https://github.com/Quis03/slot-r36s.git
-   cd slot-r36s
-   r36s/build.sh
+   python3 prepare_sd.py                              # macOS
+   python3 prepare_sd.py --card /media/$USER/EASYROMS # Linux
+   python3 prepare_sd.py --card E:\                   # Windows, if EASYROMS is E:
    ```
 
-3. **Prepara la SD.** Con la scheda nel computer:
+   It copies slot and its tools to EASYROMS, moves the games from the ArkOS
+   `gb`, `gbc` and `gba` folders into `slot/Games` (unzipping them), carries
+   the `.srm` saves over to `slot/Saves` and makes a cart label for every
+   game. It deletes nothing, so ArkOS keeps working as before. With `--clean`
+   it removes whatever slot does not use (other systems, BIOS, videos); back
+   the card up first.
 
-   ```bash
-   python3 r36s/prepare_sd.py                              # Mac
-   python3 r36s/prepare_sd.py --card /media/$USER/EASYROMS # Linux
-   ```
+   Without Python: copy the `slot` and `tools` folders from the zip to the
+   root of EASYROMS, then copy your unzipped ROMs into `slot/Games/GBA`
+   (or `GB`, `GBC`).
 
-   Copia slot e i suoi script in EASYROMS, porta i giochi delle cartelle
-   `gb`, `gbc` e `gba` di ArkOS in `slot/Games` (estraendo gli zip), i
-   salvataggi `.srm` in `slot/Saves` e crea le label delle cartucce. Non
-   cancella niente: ArkOS continua a funzionare come prima. Con `--clean`
-   toglie invece tutto quello che slot non usa (altre console, BIOS, video);
-   prima fai il backup.
+4. **Try it.** Eject the card, start the console and open ArkOS → Options →
+   Tools → **Slot**. In this trial run, *Power off* and *Restart* inside slot
+   bring you back to ArkOS.
 
-4. **Provalo.** Espelli la SD, avvia la console e apri ArkOS → Options →
-   Tools → **Slot**. In questa prova *Spegni* e *Riavvia* dentro slot ti
-   riportano ad ArkOS.
+5. **Install it.** If everything works: Options → Tools → **Slot - Install**.
+   The console restarts straight into slot. Install also turns off the ArkOS
+   services slot does not use (Samba, SSH, Bluetooth and the helpers that only
+   serve EmulationStation), and remembers which ones were on.
 
-5. **Installalo.** Se va tutto bene: Options → Tools → **Slot - Installa**. La
-   console si riavvia direttamente in slot. Installa spegne anche i servizi di
-   ArkOS che slot non usa (Samba, SSH, Bluetooth, i programmi di supporto di
-   EmulationStation) e ricorda quali erano accesi.
+### Building from source
 
-## Uso
+Instead of steps 2 and 3, on macOS or Linux with `git` and **Docker** (on a
+Mac, [Colima](https://github.com/abiosoft/colima) works too), since slot is
+built for ARM inside a container:
 
-- **FN**: premuto brevemente apre il menu; dentro un gioco apre il menu di
-  gioco, tenuto premuto espelle la cartuccia.
-- **Power**: premuto brevemente mette in pausa e spegne lo schermo (lo
-  riaccende la pressione successiva); tenuto premuto un secondo salva la
-  partita e spegne la console.
-- Sullo schermo 640×480 il 3× del GBA non ci sta: in Menu → Screen → GBA →
-  Scale scegli *Fit* con lo shader *Shimmerless* per riempire lo schermo, o
-  *Integer* per un 2× nitido.
-- **Sfondi**: metti dei PNG (meglio 640×480) in `EASYROMS/slot/Wallpapers` e
-  sceglili da menu → Wallpaper.
-- **Nuovi giochi**: copiali, non zippati, in `EASYROMS/slot/Games/GBA`
-  (o `GB`, `GBC`). Rilanciando `prepare_sd.py` crea le label che mancano.
+```bash
+git clone https://github.com/Quis03/slot-r36s.git
+cd slot-r36s
+r36s/build.sh                  # the first build downloads the toolchain and takes a while
+python3 r36s/prepare_sd.py     # same options as above
+```
 
-## Tornare ad ArkOS
+## Using it
 
-- **Una volta sola**: crea dal PC un file vuoto `EASYROMS/slot/ARKOS`. Al
-  prossimo avvio parte EmulationStation; cancellalo per tornare a slot.
-- **Del tutto**: con il file `ARKOS`, da ArkOS apri Options → Tools →
-  **Slot - Disinstalla**. Rimette EmulationStation e riaccende i servizi spenti.
-- Se slot si blocca o non parte, al riavvio torna da sola EmulationStation.
+- **FN**: a short press opens the menu (the game menu while playing); hold it
+  to eject the cart.
+- **Power**: a short press pauses and turns the screen off (the next press
+  turns it back on); hold it for a second to save the game and power off.
+- The GBA's 3× does not fit the 640×480 screen: in Menu → Screen → GBA →
+  Scale, pick *Fit* with the *Shimmerless* shader to fill the screen, or
+  *Integer* for a sharp 2×.
+- **Wallpapers**: put PNGs (640×480 is best) in `EASYROMS/slot/Wallpapers`
+  and pick one from the menu → Wallpaper.
+- **New games**: copy them, unzipped, into `EASYROMS/slot/Games/GBA` (or `GB`,
+  `GBC`). Running `prepare_sd.py` again makes the labels that are missing.
 
-## Se qualcosa non va
+## Going back to ArkOS
 
-I log sono in `EASYROMS/slot/Logs` (`slot.log`, `slot-session.log`,
-`diag.txt`). Per tracce dettagliate crea un file vuoto `EASYROMS/slot/TRACE`,
-riproduci il problema e allega i log a una issue; poi toglilo, perché rallenta
-un po' il gioco.
+- **Once**: create an empty file `EASYROMS/slot/ARKOS` from a computer. The
+  next boot starts EmulationStation; delete the file to get slot back.
+- **For good**: with the `ARKOS` file in place, open ArkOS → Options → Tools →
+  **Slot - Uninstall**. EmulationStation is back, and the services Install
+  turned off are on again.
+- If slot hangs or does not start, EmulationStation comes back by itself at
+  the next boot.
+
+## If something goes wrong
+
+The logs are in `EASYROMS/slot/Logs` (`slot.log`, `slot-session.log`,
+`diag.txt`). For detailed traces, create an empty file `EASYROMS/slot/TRACE`,
+reproduce the problem and attach the logs to an
+[issue](https://github.com/Quis03/slot-r36s/issues). Remove the file
+afterwards, as it slows games down a little.
 
 ---
 

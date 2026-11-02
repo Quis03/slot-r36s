@@ -9,6 +9,6 @@ if [ -f /etc/slot-disabled-services ]; then
 	rm -f /etc/slot-disabled-services
 fi
 systemctl daemon-reload
-echo "Slot disinstallato, torna ArkOS. Riavvio..." > /dev/tty1 2>/dev/null
+echo "slot uninstalled, ArkOS is back. Restarting..." > /dev/tty1 2>/dev/null
 sync; sleep 3
 reboot
