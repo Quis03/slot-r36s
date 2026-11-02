@@ -3,6 +3,14 @@ name: r36s-release
 on:
   push:
     tags: ['v*-r36s.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to create on the dispatched commit, like v1.12.0-r36s.1
+        required: true
+
+env:
+  TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 permissions:
   contents: write
@@ -13,6 +21,14 @@ jobs:
     if: github.repository == 'Quis03/slot-r36s'
     runs-on: ubuntu-24.04-arm
     steps:
+      - name: Check the tag
+        run: |
+          set -eu
+          case "$TAG" in v*-r36s.*) ;; *) echo "::error::$TAG is not a v*-r36s.* tag"; exit 1 ;; esac
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$GITHUB_REF" != refs/heads/r36s ]; then
+            echo "::error::dispatch this from r36s"; exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       - name: Build
@@ -57,7 +73,7 @@ jobs:
         id: package
         run: |
           set -eu
-          zip="slot-r36s-${GITHUB_REF_NAME}.zip"
+          zip="slot-r36s-${TAG}.zip"
           stage="$RUNNER_TEMP/stage"
           rm -rf "$stage"
           mkdir -p "$stage"
@@ -74,5 +90,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ZIP: ${{ steps.package.outputs.zip }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "$ZIP" --repo "$GITHUB_REPOSITORY" \
-            --title "$GITHUB_REF_NAME" --notes-file r36s/release-notes.md --verify-tag
+          set -eu
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            target="--target $GITHUB_SHA"
+          else
+            target="--verify-tag"
+          fi
+          gh release create "$TAG" "$ZIP" --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG" --notes-file r36s/release-notes.md $target
