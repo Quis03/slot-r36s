@@ -43,14 +43,14 @@ jobs:
       - name: Test
         run: |
           set -u
+          status=0
           docker run --rm --platform linux/arm64 \
             -v "$PWD":/src -w /src \
             -v slot-cargo:/usr/local/cargo/registry \
             -v slot-rustup:/usr/local/rustup \
             -e SLOT_SILENT=1 \
             slot-r36s-build sh -c 'cargo test --target-dir target-linux --workspace --lib --tests --no-fail-fast' \
-            > test.log 2>&1
-          status=$?
+            > test.log 2>&1 || status=$?
           cat test.log
           echo "cargo test exited with $status"
           failed="$(sed -n 's/^test \(.*\) \.\.\. FAILED$/\1/p' test.log | sort -u)"
