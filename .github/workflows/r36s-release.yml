@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build
-        run: r36s/build.sh
+        run: sudo r36s/build.sh
 
       - name: Check the binary
         run: |
